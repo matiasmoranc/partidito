@@ -167,7 +167,7 @@ function netHostIn(dt){
 function netHostOut(){
   const now=performance.now();if(now-NET.lastW<50)return;NET.lastW=now;
   const leg=L=>L.kick>0?[r2(L.kick),L.kt|0,r2(L.kd||0.3)]:0;
-  const w={n:++NET.wN,ko:NET.ko,sc:score.slice(),m:mode==='goal'?1:0,wd:[r2(wind.x),r2(wind.y)],
+  const w={n:++NET.wN,ko:NET.ko,rs:[rsN,dead?dead.type:''],sc:score.slice(),m:mode==='goal'?1:0,wd:[r2(wind.x),r2(wind.y)],
     e:allEnts().map(e=>[r2(e.x),r2(e.y),r2(e.face),r2(e.vx),r2(e.vy),r2((e.isK?e.ph:e.armPh)%62.8),leg(e.legs.L),leg(e.legs.R),e.isK?({dive:'d',hold:'h',recover:'c'}[e.state]||'r'):0,e.isK?[r2(e.t),r2(e.ddx),r2(e.ddy),r2(e.dh)]:0]),
     b:[r2(B.x),r2(B.y),r2(B.z),r2(B.vx),r2(B.vy),r2(B.vz),B.owner?slotOf(B.owner):-1,B.held?slotOf(B.held):-1]};
   NET.room.presence({w}).catch(()=>{});
@@ -189,6 +189,8 @@ function applyWorld(w,dt,hard){
     B.owner=b[6]>=0&&b[6]<10?ent(b[6]):null;B.held=b[7]>=0&&b[7]<10?ent(b[7]):null;B.follow=null;}
   if(Array.isArray(w.sc)){const sc=w.sc.join('-');if(NET.lastSc!==null&&sc!==NET.lastSc){const t=(w.sc[0]|0)>score[0]?0:1;showBanner(t===NET.team?'¡GOOOL!':'Gol rival',1900,'big');crowdTo(0.45,0.3);buzz([60,40,160]);}
     NET.lastSc=sc;score[0]=w.sc[0]|0;score[1]=w.sc[1]|0;}
+  if(Array.isArray(w.rs)&&w.rs[1]&&w.rs[1]!==NET.lastRs){showBanner({lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[w.rs[1]]||'',1300,'mid');}
+  if(Array.isArray(w.rs))NET.lastRs=w.rs[1];
   if(Array.isArray(w.wd)){wind.x=fin(w.wd[0],-5,5)||0;wind.y=fin(w.wd[1],-5,5)||0;}
   if(typeof w.ko==='number'&&w.ko!==NET.seenKo){NET.seenKo=w.ko;const a=w.e[NET.slot];if(Array.isArray(a)&&!hard){P.x=a[0];P.y=a[1];P.vx=P.vy=0;P.face=a[2];cam.yaw=P.face;}}
 }
@@ -292,6 +294,7 @@ function pickMate(x,y){
   if(best)selectPlayer(best);
 }
 function updOwner(dt){
+  if(mode==='dead'){B.owner=null;return;}
   if(B.held||B.follow||B.z>0.6){B.owner=null;return;}
   let o=B.owner;if(o&&Math.hypot(B.x-o.x,B.y-o.y)>2.2)o=null;
   if(!o){let best=null,bd=1e9;for(const p of players){if(p===B.lk)continue;const r=p===P?REACH:1.2,d=Math.hypot(B.x-p.x,B.y-p.y);if(d<=r&&d<bd){bd=d;best=p;}}
@@ -510,7 +513,7 @@ function bestMate(p){
   return best;
 }
 function solveSpeedTo(a,d,lofted){let lo=1,hi=31;for(let i=0;i<9;i++){const mid=(lo+hi)/2,r=simBall(launch(a,mid,0,lofted,d),6,lofted?'land':'stop');const e=lofted&&r.landed?r.landed:r.end;if(Math.hypot(e[0]-B.x,e[1]-B.y)<d)lo=mid;else hi=mid;}return(lo+hi)/2;}
-function applyKick(p,a,v,L){B.follow=null;B.att=false;B.owner=null;B.lk=p;
+function applyKick(p,a,v,L){p.setpiece=null;B.follow=null;B.att=false;B.owner=null;B.lk=p;
   Object.assign(B,L,{z:Math.max(B.z,L.z||0),inGoal:-1,shot:v>8,nm:0,trail:[],kn:0,lt:p.team,ltp:p});
   p.kickCd=0.7;p.touchCd=0.25;
   sKick(v/33*(p===P?1:0.6));
@@ -539,12 +542,14 @@ function aiBall(p,dt){
   movePl(p,p.face,0,dt);
   if(p.pk)return;
   const gx=p.team?0:FW,dG=Math.hypot(gx-p.x,CY-p.y);
+  if(!p.plan&&p.setpiece==='corner'){p.plan={type:'cross'};}
+  if(!p.plan&&p.setpiece==='lateral'){const m=bestMate(p)||nearestMate(p);if(m)p.plan={type:'pass',m};}
   if(!p.plan){if(dG<28)p.plan={type:'shot'};else{const m=bestMate(p)||nearestMate(p);p.plan=m?{type:'pass',m}:{type:'shot'};}
     if(p.plan.type==='shot'){const k=keepers[p.team?0:1],side=k.y>CY?-1:1;p.plan.ty=CY+side*(PO-0.45-Math.random()*1.4);}}
-  const ta=p.plan.type==='shot'?Math.atan2(p.plan.ty-B.y,gx-B.x):Math.atan2(p.plan.m.y-B.y,p.plan.m.x-B.x);
+  const ta=p.plan.type==='cross'?Math.atan2(CY-B.y,gx-teamDir(p.team)*10-B.x):p.plan.type==='shot'?Math.atan2(p.plan.ty-B.y,gx-B.x):Math.atan2(p.plan.m.y-B.y,p.plan.m.x-B.x);
   const df=wrap(ta-p.face);p.face=wrap(p.face+clamp(df,-3.2*dt,3.2*dt));
   p.aiT-=dt;
-  if(p.aiT<=0&&Math.abs(df)<0.3){if(p.plan.type==='shot')aiShoot(p,p.plan.ty);else aiPass(p,p.plan.m);p.plan=null;}
+  if(p.aiT<=0&&Math.abs(df)<0.3){if(p.plan.type==='cross')aiCross(p);else if(p.plan.type==='shot')aiShoot(p,p.plan.ty);else aiPass(p,p.plan.m);p.plan=null;p.setpiece=null;}
 }
 function aiUpdate(p,dt){
   if(p.cmd){const d=Math.hypot(p.cmd.x-p.x,p.cmd.y-p.y);if(d<1.3)p.cmd=null;else{moveTo(p,p.cmd.x,p.cmd.y,7,dt);return;}}
@@ -671,10 +676,50 @@ function interact(P){
   }
 }
 
+/* ======================= PELOTA AFUERA: LATERAL, CÓRNER, SAQUE DE ARCO ======================= */
+let dead=null,rsN=0,outGrace=0;
+function checkOut(){
+  if(outGrace>0&&!B.follow&&Math.hypot(B.vx,B.vy)<3)return;
+  if(mode!=='play'||B.held||B.inGoal>=0)return;
+  const lt=B.lt===undefined?0:B.lt;let r=null;
+  if(B.y<-BR||B.y>FH+BR){r={type:'lateral',team:1-lt,x:clamp(B.x,1,FW-1),y:B.y<0?0:FH};}
+  else if(B.x<-BR||B.x>FW+BR){const s=B.x<0?0:1,def=s===0?0:1;   // arco izquierdo lo defiende celeste
+    if(lt===def)r={type:'corner',team:1-def,x:s?FW:0,y:B.y<CY?0:FH};
+    else r={type:'arco',team:def,x:s?FW-5.5:5.5,y:CY+(B.y<CY?-4:4)};}
+  if(!r)return;
+  B.follow=null;B.owner=null;mode='dead';dead={...r,t:0.9};
+  showBanner({lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[r.type],1300,'mid');
+  if(typeof tone==='function')tone('square',2900,2700,0.06,0.18);
+}
+function doRestart(){
+  const r=dead;dead=null;rsN++;outGrace=0.6;
+  if(r.type!=='arco'){r.x=clamp(r.x,0.35,FW-0.35);r.y=clamp(r.y,0.35,FH-0.35);}
+  Object.assign(B,{x:r.x,y:r.y,z:0,vx:0,vy:0,vz:0,spin:0,top:0,kn:0,follow:null,owner:null,held:null,lk:null,inGoal:-1,shot:false,trail:[],lt:r.team});
+  if(r.type==='arco'){
+    const k=keepers[r.team];k.x=r.x;k.y=r.y;k.vx=k.vy=0;k.face=r.team?Math.PI:0;k.state='hold';k.t=0;k.cd=0;B.held=k;B.z=1;
+    mode='play';return;}
+  // el jugador del equipo que saca más cerca del lugar aparece en la línea
+  let tk=null,bd=1e9;for(const p of players){if(p.team!==r.team||p.remote&&p!==P)continue;const d=Math.hypot(p.x-r.x,p.y-r.y);if(d<bd){bd=d;tk=p;}}
+  if(!tk)tk=players.find(p=>p.team===r.team);
+  const inx=r.type==='corner'?(r.x<1?1:-1):0,iny=r.y<1?1:-1;           // hacia adentro de la cancha
+  const ux=inx*0.7071*(r.type==='corner'?1:0),uy=r.type==='corner'?iny*0.7071:iny,face=Math.atan2(uy,ux);
+  tk.x=r.x-Math.cos(face)*0.55;tk.y=r.y-Math.sin(face)*0.55;tk.vx=tk.vy=0;tk.face=face;tk.cmd=null;tk.pk=null;tk.plan=null;tk.aiT=1.2+Math.random()*0.8;tk.setpiece=r.type;
+  B.owner=tk;B.lt=tk.team;
+  for(const p of players)if(p.team!==tk.team){const dx=p.x-B.x,dy=p.y-B.y,d=Math.hypot(dx,dy);if(d<4&&d>1e-4){p.x=B.x+dx/d*4;p.y=B.y+dy/d*4;}}
+  if(tk.team===myTeam()&&tk!==P&&(!NET.on||canTake(tk))&&!P.isK){P=tk;cam.yaw=face;cam.goal=null;clearAim();}
+  else if(tk===P){cam.yaw=face;cam.goal=null;}
+  mode='play';
+}
+function aiCross(p){ST.pass[p.team]++;
+  const gx=p.team?0:FW,d0=teamDir(p.team),tx=gx-d0*(8+Math.random()*5),ty=CY+(Math.random()*2-1)*6;
+  const d=Math.hypot(tx-B.x,ty-B.y),a=Math.atan2(ty-B.y,tx-B.x)+gauss()*0.04,v=solveSpeedTo(a,d,true)*(1+gauss()*0.04);
+  startKick(p,a,v,true,()=>applyKick(p,a,v,launch(a,v,0,true,d)));
+}
+
 /* ======================= ARQUEROS ======================= */
 function resetKeepers(){for(const k of keepers){k.x=k.lx-k.dir*0.9;k.y=CY;k.vx=k.vy=0;k.state='ready';k.t=0;k.react=-1;k.face=k.dir>0?Math.PI:0;}}
 function mateOfK(k){let b=null,bd=1e9;for(const p of players)if(p.team===k.i){const d=Math.hypot(p.x-k.x,p.y-k.y);if(d<bd){bd=d;b=p;}}return b;}
-function release(k){B.follow=null;B.owner=null;B.lk=null;B.att=false;
+function release(k){B.lt=k.i;B.follow=null;B.owner=null;B.lk=null;B.att=false;
   B.held=null;const mt=mateOfK(k),tx=mt.x-k.x,ty=mt.y-k.y,d=Math.hypot(tx,ty)||1,ux=tx/d,uy=ty/d;
   B.x=k.x+ux*0.5;B.y=k.y+uy*0.5;B.spin=0;B.top=0;B.kn=0;B.shot=false;B.inGoal=-1;
   if(d<32){const v=clamp(Math.sqrt(2*1.25*d)+0.6,4,15);B.z=0;B.vz=0;B.vx=ux*v;B.vy=uy*v;}
@@ -763,14 +808,14 @@ function keeperBall(k){
   const sp3=Math.hypot(B.vx,B.vy,B.vz),tip=k.state==='dive'&&t>0.72;
   const wasShot=B.shot;
   if(sp3<(k.state==='dive'?13:17)&&!tip&&Math.random()<0.88){
-    B.held=k;B.lk=null;k.state='hold';k.t=0;k.vx=k.vy=0;B.shot=false;sGlove(sp3);
+    B.held=k;B.lk=null;B.lt=k.i;k.state='hold';k.t=0;k.vx=k.vy=0;B.shot=false;sGlove(sp3);
     if(wasShot){saves++;showBanner('¡Atajó!',1100,'mid');}
   }else{
     const nx=d>1e-6?dx/d:0,ny=d>1e-6?dy/d:1;B.x=cx+nx*(rad+BR);B.y=cy+ny*(rad+BR);
     const vn=B.vx*nx+B.vy*ny;if(vn<0){B.vx-=1.4*vn*nx;B.vy-=1.4*vn*ny;}
     const side=Math.sign(B.y-k.y)||(Math.random()<0.5?-1:1);B.vy=side*(3+Math.random()*4)+B.vy*0.2;
     B.vx=Math.random()<0.25?B.vx*0.3:-k.dir*(1.5+Math.random()*3);B.vz=Math.abs(B.vz)*0.4+1+Math.random()*2.5;B.z=Math.max(B.z,0.05);
-    B.spin=gauss()*0.4;B.top=0;B.kn=0;B.lk=null;k.cd=0.35;sGlove(sp3);
+    B.spin=gauss()*0.4;B.top=0;B.kn=0;B.lk=null;B.lt=k.i;k.cd=0.35;sGlove(sp3);
     if(wasShot){saves++;showBanner('¡Qué atajada!',1200,'mid');}
     B.shot=false;
   }
@@ -808,7 +853,7 @@ function kickoff(kt){
   cam.yaw=0;
   {const a=Math.random()*Math.PI*2,m=Math.random()<0.25?0:0.8+Math.random()*3;wind.x=Math.cos(a)*m;wind.y=Math.sin(a)*m;}
   setTimeout(()=>{tone('square',2900,2700,0.07,0.12);setTimeout(()=>tone('square',2900,2600,0.08,0.45),170);},250);
-  resetKeepers();hist=[];mode='play';modeT=0;clearInput();crowdTo(0.04,1.5);
+  dead=null;resetKeepers();hist=[];mode='play';modeT=0;clearInput();crowdTo(0.04,1.5);
 }
 
 /* ======================= MOTOR 3D (WebGL) ======================= */
@@ -1308,7 +1353,9 @@ function step(dt,now){
   for(const k of keepers){if(k===P)updKeeperCtl(k,dt);else if(!k.remote)updKeeper(k,dt);}
   const n=Math.ceil(dt/0.004),h=dt/n;
   for(let i=0;i<n;i++){if(B.follow)followStep(h);else updBall(h);for(const p of players)if(!(B.follow&&p===B.follow.kp&&B.follow.s<1.2))interact(p);for(const k of keepers)keeperBall(k);
-    if(B.follow&&(B.held||Math.hypot(B.vx-B.follow.ex,B.vy-B.follow.ey)>0.5))B.follow=null;}
+    if(B.follow&&(B.held||Math.hypot(B.vx-B.follow.ex,B.vy-B.follow.ey)>0.5))B.follow=null;checkOut();}
+  if(mode==='dead'&&dead){dead.t-=dt;if(dead.t<=0)doRestart();}
+  outGrace-=dt;
   updOwner(dt);
   for(const p of [...players,...keepers])if(p.pk){p.pk.t-=dt;if(p.pk.t<=0){const r=p.pk.run;p.pk=null;r();}}
   if(Math.hypot(B.vx,B.vy,B.vz)>7&&!B.held){B.trail.push([B.x,B.y,B.z]);if(B.trail.length>26)B.trail.shift();}else if(B.trail.length)B.trail.shift();
