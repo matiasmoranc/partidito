@@ -12,6 +12,7 @@ Fútbol táctico 5 contra 5 para el celular: toda la cancha en vertical, como un
 - **Saque de arco:** el rival no puede entrar al área grande hasta que el arquero saque.
 - **Pasar o patear:** tocá una vez al que tiene la pelota, después tocá y mantené el lugar adonde querés pasarla. Cuanto más mantenés, más fuerte (con un máximo). Mientras mantenés ves hasta dónde va a llegar.
 - Hay goles, laterales, córners y saques de arco.
+- **⚙ Ajustes:** distancia de marca del rival, potencia máxima del pase y tiempo de carga del pase.
 
 ## Contra la PC u online
 - Por defecto jugás contra la PC.
