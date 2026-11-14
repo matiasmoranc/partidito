@@ -11,7 +11,7 @@ El dueño escribe en español rioplatense (Uruguay); respondé y escribí los te
 - La pelota **se pega** apenas toca el borde de un jugador (`RST`, arquero en su área `RKP`).
 - El que tiene la pelota no se mueve; los rivales se frenan a `S.cfg.bl` m de él (por defecto 5) y solo pueden cortar pases.
 - Ajustes (botón ⚙): distancia de marca `S.cfg.bl` (2–10 m) y potencia máxima `S.cfg.pm` (60–140 %) viajan como acción `{k:'c'}` y valen para todo el partido online; el tiempo de carga del pase `CFG.ch` es local (localStorage `pt_cfg`).
-- Pase: tocar al que tiene la pelota → tocar y mantener el destino; el tiempo apretado es la potencia (máx. 1,1 s). Velocidad `VMIN`..`VMAX*S.cfg.pm`, frenado constante `AB`.
+- Pase: tocar al que tiene la pelota → tocar y mantener el destino; el tiempo apretado es la potencia (llega al máximo en `CFG.ch` s, por defecto 1,1). Velocidad `VMIN`..`VMAX*S.cfg.pm`, frenado constante `AB`.
 - Saque del medio (`S.ko`): el rival no cruza la mitad hasta el primer pase del que saca.
 - Saque de arco (`S.gk`): el rival no entra al área grande hasta que saca el arquero.
 - Hay goles, laterales, córners y saques de arco (`restartSim`).
