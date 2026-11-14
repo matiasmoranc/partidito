@@ -21,7 +21,7 @@ canvas{display:block;touch-action:none;position:fixed;left:0;top:0}
 (()=>{
 'use strict';
 /* =================== SIMULACIÓN (determinista: mismos eventos => mismo partido en todos los teléfonos) =================== */
-const FW=105,FH=68,CY=34,PO=3.66,DT=1/60,VP=6.8,VK=5.6,AB=2.6,VMIN=4,VMAX=24,RST=0.95,RKP=1.35,BLOCK=3;
+const FW=105,FH=68,CY=34,PO=3.66,DT=1/60,VP=6.8,VK=5.6,AB=2.6,VMIN=4.6,VMAX=27.6,RST=1.9,RKP=2.4,BLOCK=5;
 const sq=Math.sqrt,clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const team=i=>i<5?0:1,isK=i=>i%5===0;
 const FORM=[[2,34],[18,20],[18,48],[38,26],[38,42]];
@@ -34,9 +34,9 @@ function newState(kt){
 function kickoffSim(S,kt){
   for(let i=0;i<10;i++){const q=formPos(i,team(i)===kt);const P=S.p[i];P.x=q[0];P.y=q[1];P.path=null;P.pi=0;}
   const k=kt?8:3;S.p[k].x=FW/2-(kt?-1:1)*0.9;S.p[k].y=CY;
-  Object.assign(S.b,{x:FW/2,y:CY,vx:0,vy:0,o:k,lk:-1,lkT:0,lt:kt});S.rs=null;S.kc++;
+  Object.assign(S.b,{x:FW/2,y:CY,vx:0,vy:0,o:k,lk:-1,lkT:0,lt:kt});S.rs=null;S.kc++;S.ko={team:kt};S.gk=null;
 }
-function cloneS(S){return{tick:S.tick,p:S.p.map(q=>({x:q.x,y:q.y,path:q.path,pi:q.pi})),b:{...S.b},sc:S.sc.slice(),rs:S.rs?{...S.rs}:null,kc:S.kc,rsN:S.rsN};}
+function cloneS(S){return{tick:S.tick,p:S.p.map(q=>({x:q.x,y:q.y,path:q.path,pi:q.pi})),b:{...S.b},sc:S.sc.slice(),rs:S.rs?{...S.rs}:null,kc:S.kc,rsN:S.rsN,ko:S.ko?{...S.ko}:null,gk:S.gk?{...S.gk}:null};}
 function applyAct(S,a){
   if(!a||typeof a!=='object')return;const i=a.i|0;if(i<0||i>9)return;const b=S.b,P=S.p[i];
   if(a.k==='m'){
@@ -49,7 +49,17 @@ function applyAct(S,a){
     const tx=+a.tx,ty=+a.ty,pw=clamp(+a.pw||0,0,1);if(!isFinite(tx)||!isFinite(ty))return;
     const dx=tx-b.x,dy=ty-b.y,d=sq(dx*dx+dy*dy);if(d<0.3)return;
     const v=VMIN+pw*(VMAX-VMIN);b.vx=dx/d*v;b.vy=dy/d*v;b.o=-1;b.lk=i;b.lkT=24;b.lt=team(i);
+    if(S.ko&&S.ko.team===team(i))S.ko=null;if(S.gk&&S.gk.team===team(i)&&isK(i))S.gk=null;
   }
+}
+function inArea(t,x,y){return y>CY-20.16&&y<CY+20.16&&(t?x>FW-16.5:x<16.5);}
+// ¿este paso lo lleva a un lugar prohibido? (cerca del que tiene la pelota, cruzar la mitad en el saque, entrar al área en el saque de arco)
+function blocked(S,i,x,y){
+  const b=S.b,t=team(i);
+  if(b.o>=0&&team(b.o)!==t){const c=S.p[b.o],dx=x-c.x,dy=y-c.y,P=S.p[i],ox=P.x-c.x,oy=P.y-c.y;if(dx*dx+dy*dy<BLOCK*BLOCK&&dx*dx+dy*dy<ox*ox+oy*oy)return true;}
+  if(S.ko&&S.ko.team!==t){if(t===0?x>FW/2-0.5:x<FW/2+0.5)return true;}
+  if(S.gk&&S.gk.team!==t&&inArea(S.gk.team,x,y)&&!inArea(S.gk.team,S.p[i].x,S.p[i].y))return true;
+  return false;
 }
 function keeperBox(i){return team(i)?[FW-16.5,FW]:[0,16.5];}
 function stepSim(S){
@@ -57,12 +67,14 @@ function stepSim(S){
   if(S.rs){S.rs.t--;if(S.rs.t<=0)restartSim(S);}
   for(let i=0;i<10;i++){const P=S.p[i];if(!P.path||b.o===i)continue;
     const t=P.path[P.pi],dx=t[0]-P.x,dy=t[1]-P.y,d=sq(dx*dx+dy*dy),st=(isK(i)?VK:VP)*DT;
-    if(d<=st){P.x=t[0];P.y=t[1];P.pi++;if(P.pi>=P.path.length){P.path=null;P.pi=0;}}else{P.x+=dx/d*st;P.y+=dy/d*st;}
+    let nx,ny,reached=false;if(d<=st){nx=t[0];ny=t[1];reached=true;}else{nx=P.x+dx/d*st;ny=P.y+dy/d*st;}
+    if(blocked(S,i,nx,ny)){P.path=null;P.pi=0;continue;}
+    P.x=nx;P.y=ny;if(reached){P.pi++;if(P.pi>=P.path.length){P.path=null;P.pi=0;}}
     if(isK(i)){const kb=keeperBox(i);if(P.x<kb[0]||P.x>kb[1]||P.y<CY-20.16||P.y>CY+20.16){P.x=clamp(P.x,kb[0],kb[1]);P.y=clamp(P.y,CY-20.16,CY+20.16);}}
     P.x=clamp(P.x,-3,FW+3);P.y=clamp(P.y,-3,FH+3);}
   if(b.o>=0){const c=S.p[b.o];
     for(let j=0;j<10;j++){if(team(j)===team(b.o))continue;const P=S.p[j],dx=P.x-c.x,dy=P.y-c.y,d=sq(dx*dx+dy*dy);
-      if(d<BLOCK){if(d<1e-6){P.x=c.x+(team(j)?BLOCK:-BLOCK);}else{P.x=c.x+dx/d*BLOCK;P.y=c.y+dy/d*BLOCK;}P.path=null;P.pi=0;}}
+      if(d<BLOCK){const m=Math.min(BLOCK-d,VP*DT);if(d<1e-6){P.x+=team(j)?m:-m;}else{P.x+=dx/d*m;P.y+=dy/d*m;}if(P.path&&blocked(S,j,P.path[P.pi][0],P.path[P.pi][1])){P.path=null;P.pi=0;}}}
     b.x=c.x;b.y=c.y;b.vx=0;b.vy=0;}
   else if(!S.rs){
     const s=sq(b.vx*b.vx+b.vy*b.vy);if(s>0){const ns=s-AB*DT;if(ns<=0){b.vx=0;b.vy=0;}else{b.vx*=ns/s;b.vy*=ns/s;}}
@@ -76,7 +88,7 @@ function stepSim(S){
       for(let i=0;i<10;i++){if(i===b.lk&&b.lkT>0)continue;const P=S.p[i],dx=P.x-b.x,dy=P.y-b.y,d=sq(dx*dx+dy*dy);
         let r=RST;if(isK(i)){const kb=keeperBox(i);if(b.x>=kb[0]-0.5&&b.x<=kb[1]+0.5)r=RKP;}
         if(d<r&&d<bd){bd=d;best=i;}}
-      if(best>=0){b.o=best;b.vx=0;b.vy=0;b.lk=-1;b.lkT=0;b.lt=team(best);S.p[best].path=null;S.p[best].pi=0;}}
+      if(best>=0){S.ko=null;if(S.gk&&!(isK(best)&&team(best)===S.gk.team))S.gk=null;b.o=best;b.vx=0;b.vy=0;b.lk=-1;b.lkT=0;b.lt=team(best);S.p[best].path=null;S.p[best].pi=0;}}
   }
   S.tick++;
 }
@@ -84,8 +96,10 @@ function restartSim(S){
   const r=S.rs;S.rs=null;const b=S.b;
   if(r.type==='goal'){kickoffSim(S,r.team);return;}
   let tk=-1;
-  if(r.type==='arco')tk=r.team?5:0;
+  if(r.type==='arco'){tk=r.team?5:0;S.gk={team:r.team};
+    for(let j=0;j<10;j++){if(team(j)===r.team)continue;const q=S.p[j];if(inArea(r.team,q.x,q.y)){q.path=null;q.pi=0;const ex=r.team?FW-17:17;const dx=Math.abs(q.x-(r.team?FW-16.5:16.5)),dy=Math.min(Math.abs(q.y-(CY-20.16)),Math.abs(q.y-(CY+20.16)));if(dx<dy)q.x=ex;else q.y=q.y<CY?CY-20.7:CY+20.7;}}}
   else{let bd=1e9;for(let i=0;i<10;i++){if(team(i)!==r.team||isK(i))continue;const P=S.p[i],dx=P.x-r.x,dy=P.y-r.y,d=dx*dx+dy*dy;if(d<bd){bd=d;tk=i;}}}
+  if(r.type!=='arco')S.gk=null;S.ko=null;
   const P=S.p[tk];P.x=r.x;P.y=r.y;P.path=null;P.pi=0;
   Object.assign(b,{x:r.x,y:r.y,vx:0,vy:0,o:tk,lk:-1,lkT:0,lt:r.team});
 }
@@ -301,14 +315,16 @@ function drawField(){
 }
 function drawPath(path,from,col){if(!path||!path.length)return;ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.setLineDash([5,5]);ctx.beginPath();const s0=toS(from.x,from.y);ctx.moveTo(s0.x,s0.y);for(const q of path){const s=toS(q[0],q[1]);ctx.lineTo(s.x,s.y);}ctx.stroke();ctx.setLineDash([]);
   const e=toS(path[path.length-1][0],path[path.length-1][1]);ctx.beginPath();ctx.arc(e.x,e.y,3,0,7);ctx.fillStyle=col;ctx.fill();}
-const PR=()=>Math.max(10,SC*1.3);
+const PR=()=>Math.max(8,SC*1.35);
 function draw(now){
   ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#0e1a12';ctx.fillRect(0,0,W,H);
   drawField();const S=G.S,b=S.b;
   // caminos
   for(let i=0;i<10;i++){const q=S.p[i];if(q.path)drawPath(q.path.slice(q.pi),q,team(i)===G.myTeam?'rgba(255,255,255,.75)':'rgba(255,150,140,.45)');}
   if(drag&&drag.pts.length>1){const q=S.p[drag.i];drawPath(drag.pts.slice(1),q,'#ffe678');}
-  // regla de los 3 m
+  if(S.ko){const a1=toS(FW/2,0),a2=toS(FW/2,FH);ctx.strokeStyle='rgba(255,230,120,.9)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(a1.x,a1.y);ctx.lineTo(a2.x,a2.y);ctx.stroke();}
+  if(S.gk){const lx=S.gk.team?FW:0,d=S.gk.team?-1:1,c1=toS(lx,CY-20.16),c2=toS(lx+d*16.5,CY+20.16);ctx.fillStyle='rgba(255,230,120,.18)';ctx.fillRect(Math.min(c1.x,c2.x),Math.min(c1.y,c2.y),Math.abs(c2.x-c1.x),Math.abs(c2.y-c1.y));}
+  // zona prohibida alrededor del que tiene la pelota
   if(b.o>=0){const c=toS(b.x,b.y);ctx.strokeStyle='rgba(255,255,255,.45)';ctx.setLineDash([3,4]);ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(c.x,c.y,BLOCK*SC,0,7);ctx.stroke();ctx.setLineDash([]);}
   // jugadores
   for(let i=0;i<10;i++){const q=S.p[i],s=toS(q.x,q.y),t=team(i),r=PR();
@@ -419,7 +435,7 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 setTimeout(()=>{if(!window.claude&&(location.hash||'').length>2)panel();},900);
-window.__T={advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin};
+window.__T={blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin};
 })();
 </script>
 </body>

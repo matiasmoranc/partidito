@@ -6,8 +6,10 @@ Fútbol táctico 5 contra 5 para el celular: toda la cancha en vertical, como un
 
 ## Cómo se juega
 - **Mover jugadores:** arrastrá un jugador tuyo: va a recorrer exactamente la línea que dibujaste. Los jugadores no se mueven solos.
-- **La pelota se pega:** cuando toca a un jugador (de cualquier equipo), queda en sus pies.
-- **Regla de los 3 m:** el rival no puede acercarse a menos de 3 m del que tiene la pelota; solo puede cortar pases.
+- **La pelota se pega:** apenas toca el borde de un jugador (de cualquier equipo), queda en sus pies.
+- **Zona del que tiene la pelota:** los rivales se frenan a 5 m del que la tiene; solo pueden cortar pases.
+- **Saque del medio:** el rival no puede cruzar la mitad de la cancha hasta que el equipo que saca haga el primer pase.
+- **Saque de arco:** el rival no puede entrar al área grande hasta que el arquero saque.
 - **Pasar o patear:** tocá una vez al que tiene la pelota, después tocá y mantené el lugar adonde querés pasarla. Cuanto más mantenés, más fuerte (con un máximo). Mientras mantenés ves hasta dónde va a llegar.
 - Hay goles, laterales, córners y saques de arco.
 
