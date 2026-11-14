@@ -16,6 +16,8 @@ Fútbol táctico 5 contra 5 para el celular: toda la cancha en vertical, como un
 
 ## Contra la PC u online
 - Por defecto jugás contra la PC.
-- **👥 ONLINE:** elegí un código de sala, tocá *Copiar link para invitar* y mandalo. Cada uno elige equipo; los del mismo equipo comparten los jugadores. Un equipo sin personas lo juega la PC.
+- **👥 ONLINE → ⚡ Partida rápida:** entra a una sala abierta si hay alguna; si no, crea una y jugás contra la PC hasta que entre alguien.
+- **Salas abiertas:** la lista muestra las salas que están esperando gente; tocá *Entrar* y te pone en el equipo con menos personas. *Crear sala abierta* abre una nueva que todos ven.
+- **Sala privada con código:** no aparece en la lista; mandá el link para que entren. Los del mismo equipo comparten los jugadores; un equipo sin personas lo juega la PC.
 - El online manda solo las jugadas (movimientos y pases), y cada teléfono calcula el partido igual, así que todos ven exactamente lo mismo.
-- Las jugadas viajan por un servidor MQTT público y gratuito (sin cuentas). Cualquiera que sepa el código puede entrar, así que usá uno propio.
+- Las jugadas viajan por un servidor MQTT público y gratuito (sin cuentas). A una sala privada puede entrar cualquiera que sepa el código, así que usá uno propio.

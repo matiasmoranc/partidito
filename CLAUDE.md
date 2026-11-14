@@ -22,6 +22,7 @@ El dueño escribe en español rioplatense (Uruguay); respondé y escribí los te
 - **IA** (`aiThink`): juega los equipos sin humanos (contra la PC, o equipo vacío en el online). Corre cada 30 ticks y genera acciones normales.
 - **Online** (`NET`, `netConnect`, `netJoin`, `onMsg`, `netTick`):
   - En GitHub Pages: sala por código (`#codigo` en la URL) sobre brokers MQTT públicos por WebSocket (`mqttRoom`, cliente MQTT 3.1.1 mínimo escrito a mano).
+  - Salas abiertas (pedido del dueño: entrar sin pasar link): el anfitrión de una sala con `NET.open` publica cada 1 s `{open:{code,c0,c1,sc,t}}` en `partidito/v1/lobby/p/r<code>`; el panel escucha ese tema con `lobbyOpen` (`mqttRoom('lobby',…,{silent:true})`) y lista las salas (`lobbyRooms`). ⚡ Partida rápida entra a la primera o crea una.
   - Dentro de Claude (artifact): capacidad `room` de Claude (`window.claude.use('room')`), mensajes por `presence`.
   - El primero que entra es el anfitrión: lleva el reloj (`hb`), reprograma las acciones de los clientes (`in` → `ev`) y manda una foto del estado cada 1,5 s (`snap`) para corregir diferencias.
   - Los del mismo equipo comparten los jugadores.
