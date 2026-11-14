@@ -238,11 +238,15 @@ function netHostIn(dt){
       if(e.isK){if(me.ks==='d'&&e.state!=='dive'){keeperDive(e,fin(me.dx,-1,1)||0,fin(me.dy,-1,1)||1,(fin(me.dh,0,3)||0.7)>1.2);}
         else if(me.ks==='r'&&e.state==='dive'&&e.t>0.4)e.state='ready';}
       // el cliente dice "la tengo": se la damos si de verdad está cerca
-      if(me.own&&!B.owner&&!B.held&&B.lk!==e&&B.z<0.8&&mode==='play'&&Math.hypot(B.x-x,B.y-y)<2.6){B.follow=null;B.owner=e;B.lk=null;e.plan=null;e.pk=null;}}}
+      if(me.own&&!B.owner&&!B.held&&B.lk!==e&&B.z<0.9&&mode==='play'&&Math.hypot(B.x-x,B.y-y)<3.2){B.follow=null;B.owner=e;B.lk=null;e.plan=null;e.pk=null;}}}
     const k=inp.k;
     if(k&&typeof k.n==='number'&&k.n>(NET.seenK[p.peer]||0)){NET.seenK[p.peer]=k.n;const q=k.q||{};
       const ex=fin(q.ex,-BX,FW+BX),ey=fin(q.ey,-BY,FH+BY),cc=fin(q.c,-60,60),hm=clamp(q.hm|0,0,2);
-      if(k.s===s&&ex!==null&&ey!==null&&cc!==null&&(B.owner===e||B.held===e||Math.hypot(B.x-e.x,B.y-e.y)<2.6&&!B.held&&B.lk!==e)){B.owner=e;B.follow=null;kickWithParams(e,{ex,ey,c:cc,hm});}}
+      const sx=fin(k.sx,-BX,FW+BX),sy=fin(k.sy,-BY,FH+BY);
+      const near=(B.owner===e||B.held===e)||(!B.held&&(!B.owner||B.owner===e)&&B.lk!==e&&Math.hypot(B.x-e.x,B.y-e.y)<3.5);
+      if(k.s===s&&ex!==null&&ey!==null&&cc!==null&&near){
+        if(sx!==null&&sy!==null&&Math.hypot(sx-e.x,sy-e.y)<2.5&&!B.held){B.x=sx;B.y=sy;B.z=0;}
+        B.owner=B.held===e?null:e;B.follow=null;kickWithParams(e,{ex,ey,c:cc,hm});}}
     const cm=inp.c;
     if(cm&&typeof cm.n==='number'&&cm.n>(NET.seenC[p.peer]||0)){NET.seenC[p.peer]=cm.n;const t=ent(cm.s|0),x=fin(cm.x,1,FW-1),y=fin(cm.y,1,FH-1);
       if(t&&!t.isK&&t.team===mp.team&&!c[cm.s|0]&&x!==null&&y!==null)t.cmd={x,y};}
@@ -285,7 +289,7 @@ function applyDiscrete(w){
   const b=w.b;
   if(Array.isArray(b)){const wo=b[6]>=0&&b[6]<10?ent(b[6]):null;
     if(wo===P&&performance.now()<NET.predUntil){}else if(wo||performance.now()-NET.claimAt>700)B.owner=wo;   // mientras reclamo la pelota, la dejo en mis pies
-    if(wo&&wo!==P)NET.claimAt=0;
+    if(wo&&wo!==P){NET.claimAt=0;if(B.follow||performance.now()<NET.predUntil){B.follow=null;NET.predUntil=0;}}
     B.held=b[7]>=0&&b[7]<10?ent(b[7]):null;B.lkS=b[8];if(wo&&wo!==P||B.held)NET.predUntil=0;}
   if(P.isK&&B.held===P)P.state='hold';
   if(Array.isArray(w.rs)&&w.rs[1]&&w.rs[1]!==NET.lastRs)showBanner({lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[w.rs[1]]||'',1300,'mid');
@@ -318,6 +322,7 @@ function applyWorld(w,dt,hard){
 }
 function clientStep(dt,now){
   const w=netWorld();if(w&&w!==NET.lastApplied){NET.lastApplied=w;applyWorld(w,dt,false);}
+  autoSwitch();
   const st=interpState();if(st)applyInterp(st,dt);
   if(P.isK)updKeeperCtl(P,dt);else updControl(dt);
   for(const e of allEnts())if(e!==P)for(const L of [e.legs.L,e.legs.R])if(L.kick>0)L.kick-=dt;
@@ -438,6 +443,10 @@ function pickMate(x,y){
     const tol=Math.max(26,Math.sqrt(L2)*0.4);if(d<tol&&d<bd){bd=d;best=p;}}
   if(best)selectPlayer(best);
 }
+function autoSwitch(){
+  const o=teamBall();if(!o||o===P||o.remote||!canTake(o))return;
+  const wasP=P;selectPlayer(o,true);if(P===o){cam.goal=null;cam.yaw=o.face;if(wasP&&wasP.isK&&wasP.state==='hold')wasP.state='ready';}
+}
 function updOwner(dt){
   if(mode==='dead'){B.owner=null;return;}
   if(B.held||B.follow||B.z>0.6){B.owner=null;return;}
@@ -451,7 +460,8 @@ function updOwner(dt){
   if(!o.pk){const tx=o.x+Math.cos(o.face)*0.55,ty=o.y+Math.sin(o.face)*0.55,k=Math.min(1,dt*10);B.x+=(tx-B.x)*k;B.y+=(ty-B.y)*k;}
   B.z=0;B.vx=B.vy=B.vz=0;B.spin=0;B.top=0;B.kn=0;B.lt=o.team;B.ltp=o;B.inGoal=-1;
 }
-function selectPlayer(p){if(!p||!canTake(p))return;p.cmd=null;P=p;if(NET.on)netClaim(p);P.face=Math.atan2(B.y-P.y,B.x-P.x);cam.goal=P.face;showBanner('Controlás al '+p.num,800,'small');tone('sine',700,900,0.06,0.07);clearAim();}
+function teamBall(){const o=B.owner||(B.held&&B.held.isK?B.held:null);return o&&o.team===myTeam()?o:null;}
+function selectPlayer(p,auto){if(!p||!canTake(p))return;if(!auto&&teamBall()&&teamBall()!==p){showBanner('Ahora solo podés usar al que tiene la pelota',1100,'small');return;}p.cmd=null;P=p;if(NET.on)netClaim(p);P.face=Math.atan2(B.y-P.y,B.x-P.x);cam.goal=P.face;if(!auto)showBanner('Controlás al '+p.num,800,'small');tone('sine',700,900,0.06,0.07);clearAim();}
 function clearAim(){aim.id=null;aim.scr=[];aim.g=[];aim.pts=[];aim.pred=null;aim.sol=null;}
 cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);
 cv.addEventListener('contextmenu',e=>e.preventDefault());
@@ -552,10 +562,10 @@ function updAim(){
 function doKick(sol){
   if(!ballNear()){showBanner('Muy lejos',700,'small');return;}
   updAim();sol=aim.sol||sol;if(!sol)return;
-  if(NET.on&&!NET.host){NET.kickN++;NET.pend.k={n:NET.kickN,s:NET.slot,q:sol.q};netSendMe(true);
+  if(NET.on&&!NET.host){NET.kickN++;NET.pend.k={n:NET.kickN,s:NET.slot,q:sol.q,sx:r2(B.x),sy:r2(B.y)};netSendMe(true);
     const F0=pathFromParams(B.x,B.y,sol.q),t0=pathAt(F0,0.01),q=sol.q,me=P;
     startKick(P,Math.atan2(t0.ty,t0.tx),F0.v0,F0.hm===2,()=>{const F=pathFromParams(B.x,B.y,q);B.owner=null;NET.claimAt=0;
-      B.follow={pts:F.pts,cum:F.cum,len:F.len,s:0,v:F.v0,v0:F.v0,vEnd:F.vEnd,acc:F.acc,h:F.h,ex:0,ey:0,kp:me};B.lkS=NET.slot;
+      B.follow={pts:F.pts,cum:F.cum,len:F.len,s:0,v:F.v0,v0:F.v0,vEnd:F.vEnd,acc:F.acc,h:F.h,ex:0,ey:0,kp:me,noInt:true};B.lkS=NET.slot;
       NET.predUntil=performance.now()+1000*Math.min(4,F.len/Math.max(3,(F.v0+F.vEnd)/2)+0.6);sKick(F.v0/33);});}
   else kickWithParams(P,sol.q);
   const kmh=Math.round(sol.v*3.6);lastKick={kmh,leg:'R',chip:sol.hm===2};lastKickT=performance.now();
@@ -581,7 +591,7 @@ function followStep(h){
   goalCollide(0,prevX);goalCollide(1,prevX);
   if(B.x<-BX+BR||B.x>FW+BX-BR||B.y<-BY+BR||B.y>FH+BY-BR)B.follow=null;
   if(B.follow&&Math.hypot(B.vx-F.ex,B.vy-F.ey)>0.5)B.follow=null;
-  if(B.follow&&B.z<0.6&&F.s>1.5)for(const q of players){if(q===B.lk)continue;if(Math.hypot(B.x-q.x,B.y-q.y)<1.2){B.follow=null;B.vx*=0.3;B.vy*=0.3;break;}}
+  if(B.follow&&!F.noInt&&B.z<0.6&&F.s>1.5)for(const q of players){if(q===B.lk)continue;if(Math.hypot(B.x-q.x,B.y-q.y)<1.2){B.follow=null;B.vx*=0.3;B.vy*=0.3;break;}}
 }
 
 /* ======================= JUGADORES: MOVIMIENTO ======================= */
@@ -1498,7 +1508,7 @@ function drawReplay(now){
 /* ======================= LOOP ======================= */
 let last=performance.now(),crowdTimer=0;
 function step(dt,now){
-  window.__ctl=P;updPoss();if(!P.isK)updControl(dt);if(NET.on)netHostIn(dt);for(const p of players)if(p!==P&&!p.remote)aiUpdate(p,dt);separate();keepAway();updAim();
+  autoSwitch();window.__ctl=P;updPoss();if(!P.isK)updControl(dt);if(NET.on)netHostIn(dt);for(const p of players)if(p!==P&&!p.remote)aiUpdate(p,dt);separate();keepAway();updAim();
   for(const k of keepers){if(k===P)updKeeperCtl(k,dt);else if(!k.remote)updKeeper(k,dt);}
   const n=Math.ceil(dt/0.004),h=dt/n;
   for(let i=0;i<n;i++){if(B.follow)followStep(h);else updBall(h);for(const p of players)if(!(B.follow&&p===B.follow.kp&&B.follow.s<1.2))interact(p);for(const k of keepers)keeperBall(k);
