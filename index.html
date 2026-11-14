@@ -28,7 +28,7 @@ function resize(){
   cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';
   S=Math.min(W,H)/4.5;
   {const mw=Math.min(W-24,(H*0.4)*FW/FH),mh=mw*FH/FW;MM={x0:(W-mw)/2,y0:10,mw,mh,k:mw/FW};GY=Math.round(MM.y0+mh+34);GHh=H-GY;}
-  const g=document.getElementById('g');GDPR_=Math.min(window.devicePixelRatio||1,1.75);g.width=W*GDPR_;g.height=GHh*GDPR_;g.style.width=W+'px';g.style.height=GHh+'px';g.style.top=GY+'px';
+  const g=document.getElementById('g');GDPR_=Math.min(window.devicePixelRatio||1,1.5);g.width=W*GDPR_;g.height=GHh*GDPR_;g.style.width=W+'px';g.style.height=GHh+'px';g.style.top=GY+'px';
 }
 window.addEventListener('resize',resize);resize();
 
@@ -112,7 +112,7 @@ const MQTT_BROKERS=window.__BROKERS||['wss://broker.emqx.io:8084/mqtt','wss://br
 function mqttRoom(code,onStatus){
   const me='p'+Math.random().toString(36).slice(2,10),base='partidito/v1/'+code+'/';
   const enc=new TextEncoder(),dec=new TextDecoder();
-  let ws=null,ok=false,myPres={},others={},subs=[],lastSend=0,pendT=null,bi=0,ping=null,closed=false;
+  let streams=[],ws=null,ok=false,myPres={},others={},subs=[],lastSend=0,pendT=null,bi=0,ping=null,closed=false;
   const str=s=>{const b=enc.encode(s);return[b.length>>8,b.length&255,...b];};
   const varlen=n=>{const o=[];do{let d=n%128;n=Math.floor(n/128);if(n>0)d|=128;o.push(d);}while(n>0);return o;};
   const pkt=(h,body)=>new Uint8Array([h,...varlen(body.length),...body]);
@@ -127,8 +127,9 @@ function mqttRoom(code,onStatus){
   function onData(u8){const nb=new Uint8Array(buf.length+u8.length);nb.set(buf);nb.set(u8,buf.length);buf=nb;
     while(buf.length>=2){let mul=1,len=0,i=1,b;do{if(i>=buf.length)return;b=buf[i++];len+=(b&127)*mul;mul*=128;}while(b&128);
       if(buf.length<i+len)return;const type=buf[0]>>4,body=buf.slice(i,i+len);buf=buf.slice(i+len);
-      if(type===2){ok=true;send(pkt(0x82,[0,1,...str(base+'p/+'),0]));flush();onStatus&&onStatus('ok');}
-      else if(type===3){const tl=(body[0]<<8)|body[1],q=(buf[0]>>1)&3;const payload=dec.decode(body.slice(2+tl));
+      if(type===2){ok=true;send(pkt(0x82,[0,1,...str(base+'p/+'),0]));send(pkt(0x82,[0,2,...str(base+'s/+'),0]));flush();onStatus&&onStatus('ok');}
+      else if(type===3){const tl=(body[0]<<8)|body[1],topic=dec.decode(body.slice(2,2+tl)),payload=dec.decode(body.slice(2+tl));
+        if(topic.indexOf('/s/')>=0){try{const m=JSON.parse(payload);if(m&&typeof m.id==='string'&&m.id!==me&&others[m.id])for(const f of streams)try{f(m.id,m.d);}catch(e){}}catch(e){}continue;}
         try{const m=JSON.parse(payload);if(m&&typeof m.id==='string'&&m.id!==me&&m.id.length<20){if(m.bye){delete others[m.id];}else if(m.p&&typeof m.p==='object'){const isNew=!others[m.id];others[m.id]={p:m.p,t:Date.now()};if(isNew)flush();}fire();}}catch(e){}}}}
   function connect(){
     if(closed)return;const url=MQTT_BROKERS[bi%MQTT_BROKERS.length];bi++;
@@ -145,6 +146,7 @@ function mqttRoom(code,onStatus){
     presence(patch){myPres={...myPres};for(const k in patch){if(patch[k]===null)delete myPres[k];else myPres[k]=patch[k];}
       const now=performance.now();if(now-lastSend>45)flush();else if(!pendT)pendT=setTimeout(flush,45-(now-lastSend));fire();return Promise.resolve();},
     onPeers(f){subs.push(f);setTimeout(fire,0);return()=>{subs=subs.filter(x=>x!==f);};},
+    send(d){publish(base+'s/'+me,{id:me,d});},onStream(f){streams.push(f);},
     peers(){return room._ps||list();},connected(){return ok;},
     leave(){closed=true;try{publish(base+'p/'+me,{id:me,bye:1});}catch(e){}clearInterval(ping);setTimeout(()=>{try{ws.close();}catch(e){}},200);}};
   connect();return room;
@@ -169,7 +171,7 @@ function netConnectCode(code){
   if(NET.room&&NET.kind==='mqtt')NET.room.leave();
   NET.code=code;NET.kind='mqtt';NET.status='Conectando…';NET.peers=[];
   NET.room=mqttRoom(code,st=>{NET.status=st==='ok'?'Conectado':'Reconectando…';const el=document.getElementById('netst');if(el)el.textContent=NET.status;});
-  NET.room.onPeers(ch=>{NET.peers=ch.peers;netRecalc();});
+  NET.room.onPeers(ch=>{NET.peers=ch.peers;netRecalc();});NET.room.onStream(onStream);NET.snaps=[];NET.off=null;
   try{history.replaceState(null,'','#'+code);}catch(e){}
 }
 function netJoin(team){
@@ -187,82 +189,156 @@ function netRecalc(){
   const c=claimsMap();
   for(let s=0;s<10;s++){const e=ent(s);e.remote=!!(c[s]&&!c[s].sameTab);}
   if(NET.slot>=0&&c[NET.slot]&&!c[NET.slot].sameTab){const s=freeSlot(NET.team);if(s>=0){NET.slot=s;P=ent(s);netClaim(P);}}
-  if(NET.host&&!wasHost&&NET.world)applyWorld(NET.world,1,true);
+  if(NET.host&&!wasHost){const w=NET.snaps.length?NET.snaps[NET.snaps.length-1]:NET.world;if(w)applyWorld(w,1,true);}
+  if(!NET.host&&wasHost){NET.snaps=[];NET.off=null;}
 }
-function netSendMe(force){
-  if(!NET.on||!NET.room)return;const now=performance.now();if(!force&&now-NET.lastMe<33)return;NET.lastMe=now;
+/* ---- canal rápido: entradas de los clientes y foto del mundo del anfitrión ---- */
+NET.inputs={};NET.snaps=[];NET.off=null;NET.delay=0.11;NET.claimAt=0;NET.predUntil=0;NET.blend=0;
+function fast(){return NET.room&&typeof NET.room.send==='function';}
+function onStream(id,d){
+  if(!d||typeof d!=='object')return;
+  if(d.ty==='i'){NET.inputs[id]={d,at:performance.now()};}
+  else if(d.ty==='w'&&NET.hostPeer&&id===NET.hostPeer.peer&&typeof d.t==='number'){
+    const now=performance.now(),off=now-d.t;
+    NET.off=NET.off===null?off:Math.min(off,NET.off+ (off-NET.off)*0.02+0.5); // reloj del anfitrión (con margen)
+    if(off<NET.off)NET.off=off;
+    const last=NET.snaps[NET.snaps.length-1];if(last&&d.t<=last.t)return;
+    NET.snaps.push(d);if(NET.snaps.length>40)NET.snaps.shift();
+    // demora adaptativa según el jitter
+    const jit=Math.abs(off-NET.off)/1000;NET.delay=clamp(NET.delay*0.97+(0.07+jit*1.4)*0.03,0.07,0.3);
+  }
+}
+function myInput(){
   const e=P,ks=e.isK?({dive:'d',hold:'h'}[e.state]||'r'):'r';
   const me={s:NET.slot,x:r2(e.x),y:r2(e.y),vx:r2(e.vx),vy:r2(e.vy),f:r2(e.face),ph:r2(e.armPh%62.8),ks};
   if(e.isK&&e.state==='dive')Object.assign(me,{dx:r2(e.ddx),dy:r2(e.ddy),dh:r2(e.dh),dt:r2(e.t)});
   const kl=e.legs.L,kr=e.legs.R;if(kl.kick>0)me.kl=[r2(kl.kick),kl.kt|0,r2(kl.kd||0.3)];if(kr.kick>0)me.kr=[r2(kr.kick),kr.kt|0,r2(kr.kd||0.3)];
-  NET.room.presence({me,k:NET.pend.k||null,c:NET.pend.c||null}).catch(()=>{});
+  if(performance.now()-NET.claimAt<700)me.own=1;
+  return me;
 }
+function netSendMe(force){
+  if(!NET.on||!NET.room||NET.host&&fast())return;
+  const now=performance.now();if(!force&&now-NET.lastMe<(fast()?30:33))return;NET.lastMe=now;
+  const me=myInput();
+  if(fast())NET.room.send({ty:'i',me,k:NET.pend.k||null,c:NET.pend.c||null});
+  else NET.room.presence({me,k:NET.pend.k||null,c:NET.pend.c||null}).catch(()=>{});
+}
+function inputOf(p){if(fast()){const r=NET.inputs[p.peer];return r?{...r.d,at:r.at}:null;}return p.presence?{me:p.presence.me,k:p.presence.k,c:p.presence.c,at:performance.now()}:null;}
 function netHostIn(dt){
-  const c=claimsMap();
-  for(const p of NET.peers){if(p.sameTab||!p.presence)continue;const mp=p.presence.mp,me=p.presence.me;if(!mp)continue;
-    const s=mp.slot|0;if(!c[s]||c[s].peer!==p.peer)continue;const e=ent(s);
+  const c=claimsMap(),now=performance.now();
+  for(const p of NET.peers){if(p.sameTab||!p.presence)continue;const mp=p.presence.mp;if(!mp)continue;
+    const s=mp.slot|0;if(!c[s]||c[s].peer!==p.peer)continue;const e=ent(s),inp=inputOf(p);if(!inp)continue;const me=inp.me;
     if(me&&me.s===s){const x=fin(me.x,-BX,FW+BX),y=fin(me.y,-BY,FH+BY);if(x!==null&&y!==null){
-      if(!isFinite(e.x)||!isFinite(e.y)){e.x=x;e.y=y;}
-      if(!(e.isK&&e.state==='hold')){e.x=lerp(e.x,x,0.6);e.y=lerp(e.y,y,0.6);}e.vx=fin(me.vx,-12,12)||0;e.vy=fin(me.vy,-12,12)||0;
-      const f=fin(me.f,-7,7);if(f!==null)e.face=f;const ph=fin(me.ph,0,70);if(ph!==null){e.armPh=ph;e.ph=ph;}
+      const vx=fin(me.vx,-12,12)||0,vy=fin(me.vy,-12,12)||0,age=Math.min((now-inp.at)/1000,0.15);
+      if(!isFinite(e.x)||!isFinite(e.y)||Math.hypot(e.x-x,e.y-y)>6){e.x=x;e.y=y;}
+      if(!(e.isK&&e.state==='hold')){const k=Math.min(1,dt*16);e.x+=(x+vx*age-e.x)*k;e.y+=(y+vy*age-e.y)*k;}
+      e.vx=vx;e.vy=vy;const f=fin(me.f,-7,7);if(f!==null)e.face=e.face+wrap(f-e.face)*Math.min(1,dt*20);
+      const ph=fin(me.ph,0,70);if(ph!==null){e.armPh=ph;e.ph=ph;}
       for(const [k,L] of [['kl',e.legs.L],['kr',e.legs.R]])if(Array.isArray(me[k])){L.kick=fin(me[k][0],0,1)||0;L.kt=clamp(me[k][1]|0,0,3);L.kd=fin(me[k][2],0.2,1)||0.3;}
       if(e.isK){if(me.ks==='d'&&e.state!=='dive'){keeperDive(e,fin(me.dx,-1,1)||0,fin(me.dy,-1,1)||1,(fin(me.dh,0,3)||0.7)>1.2);}
-        else if(me.ks==='r'&&e.state==='dive'&&e.t>0.4)e.state='ready';}}}
-    const k=p.presence.k;
+        else if(me.ks==='r'&&e.state==='dive'&&e.t>0.4)e.state='ready';}
+      // el cliente dice "la tengo": se la damos si de verdad está cerca
+      if(me.own&&!B.owner&&!B.held&&B.lk!==e&&B.z<0.8&&mode==='play'&&Math.hypot(B.x-x,B.y-y)<2.6){B.follow=null;B.owner=e;B.lk=null;e.plan=null;e.pk=null;}}}
+    const k=inp.k;
     if(k&&typeof k.n==='number'&&k.n>(NET.seenK[p.peer]||0)){NET.seenK[p.peer]=k.n;const q=k.q||{};
       const ex=fin(q.ex,-BX,FW+BX),ey=fin(q.ey,-BY,FH+BY),cc=fin(q.c,-60,60),hm=clamp(q.hm|0,0,2);
-      if(k.s===s&&ex!==null&&ey!==null&&cc!==null&&(B.owner===e||B.held===e))kickWithParams(e,{ex,ey,c:cc,hm});}
-    const cm=p.presence.c;
+      if(k.s===s&&ex!==null&&ey!==null&&cc!==null&&(B.owner===e||B.held===e||Math.hypot(B.x-e.x,B.y-e.y)<2.6&&!B.held&&B.lk!==e)){B.owner=e;B.follow=null;kickWithParams(e,{ex,ey,c:cc,hm});}}
+    const cm=inp.c;
     if(cm&&typeof cm.n==='number'&&cm.n>(NET.seenC[p.peer]||0)){NET.seenC[p.peer]=cm.n;const t=ent(cm.s|0),x=fin(cm.x,1,FW-1),y=fin(cm.y,1,FH-1);
       if(t&&!t.isK&&t.team===mp.team&&!c[cm.s|0]&&x!==null&&y!==null)t.cmd={x,y};}
   }
 }
-function netHostOut(){
-  const now=performance.now();if(now-NET.lastW<50)return;NET.lastW=now;
+function buildWorld(){
   const leg=L=>L.kick>0?[r2(L.kick),L.kt|0,r2(L.kd||0.3)]:0;
-  const w={n:++NET.wN,ko:NET.ko,rs:[rsN,dead?dead.type:''],sc:score.slice(),m:mode==='goal'?1:0,wd:[r2(wind.x),r2(wind.y)],
+  return{n:++NET.wN,t:Math.round(performance.now()),ko:NET.ko,rs:[rsN,dead?dead.type:''],sc:score.slice(),m:mode==='goal'?1:0,wd:[r2(wind.x),r2(wind.y)],
     e:allEnts().map(e=>[r2(e.x),r2(e.y),r2(e.face),r2(e.vx),r2(e.vy),r2((e.isK?e.ph:e.armPh)%62.8),leg(e.legs.L),leg(e.legs.R),e.isK?({dive:'d',hold:'h',recover:'c'}[e.state]||'r'):0,e.isK?[r2(e.t),r2(e.ddx),r2(e.ddy),r2(e.dh)]:0]),
-    b:[r2(B.x),r2(B.y),r2(B.z),r2(B.vx),r2(B.vy),r2(B.vz),B.owner?slotOf(B.owner):-1,B.held?slotOf(B.held):-1]};
-  NET.room.presence({w}).catch(()=>{});
+    b:[r2(B.x),r2(B.y),r2(B.z),r2(B.vx),r2(B.vy),r2(B.vz),B.owner?slotOf(B.owner):-1,B.held?slotOf(B.held):-1,B.lk?slotOf(B.lk):-1]};
 }
-function netWorld(){const h=NET.hostPeer;if(!h||h.sameTab)return null;const w=h.presence&&h.presence.w;if(!w||typeof w.n!=='number')return null;
-  if(!NET.world||w.n!==NET.world.n){NET.world=w;NET.wAt=performance.now();}return NET.world;}
-function applyWorld(w,dt,hard){
-  if(!w||!Array.isArray(w.e)||w.e.length!==10)return;const age=(performance.now()-NET.wAt)/1000,k=hard?1:Math.min(1,dt*12);
-  w.e.forEach((a,s)=>{const e=ent(s);if(!Array.isArray(a))return;if(e===P&&!hard)return;
-    const x=fin(a[0],-BX,FW+BX),y=fin(a[1],-BY,FH+BY);if(x===null||y===null)return;const vx=fin(a[3],-12,12)||0,vy=fin(a[4],-12,12)||0;
-    e.x+=(x+vx*Math.min(age,0.2)-e.x)*k;e.y+=(y+vy*Math.min(age,0.2)-e.y)*k;e.vx=vx;e.vy=vy;
-    const f=fin(a[2],-7,7);if(f!==null)e.face=e.face+wrap(f-e.face)*k;const ph=fin(a[5],0,70);if(ph!==null){if(e.isK)e.ph=ph;else e.armPh=ph;}
-    for(const [i,L] of [[6,e.legs.L],[7,e.legs.R]]){const v=a[i];if(Array.isArray(v)){L.kick=fin(v[0],0,1)||0;L.kt=clamp(v[1]|0,0,3);L.kd=fin(v[2],0.2,1)||0.3;}else L.kick=0;}
-    if(e.isK&&a[8]){e.state={d:'dive',h:'hold',c:'recover'}[a[8]]||'ready';if(Array.isArray(a[9])){e.t=fin(a[9][0],0,5)||0;e.ddx=fin(a[9][1],-1,1)||0;e.ddy=fin(a[9][2],-1,1)||0;e.dh=fin(a[9][3],0,3)||1;
+function netHostOut(){
+  const now=performance.now();if(now-NET.lastW<(fast()?33:50))return;NET.lastW=now;
+  const w=buildWorld();
+  if(fast())NET.room.send({ty:'w',...w});else NET.room.presence({w}).catch(()=>{});
+}
+function netWorld(){
+  if(fast())return NET.snaps.length?NET.snaps[NET.snaps.length-1]:null;
+  const h=NET.hostPeer;if(!h||h.sameTab)return null;const w=h.presence&&h.presence.w;if(!w||typeof w.n!=='number')return null;
+  if(!NET.world||w.n!==NET.world.n){NET.world=w;NET.wAt=performance.now();if(typeof w.t==='number'){w.t=w.t;}NET.snaps.push(w);if(NET.snaps.length>40)NET.snaps.shift();
+    const off=performance.now()-(w.t||0);if(NET.off===null||off<NET.off)NET.off=off;}
+  return NET.world;
+}
+// estado de un momento pasado, interpolado entre dos fotos (movimiento suave aunque lleguen a saltos)
+function interpState(){
+  const S=NET.snaps;if(!S.length||NET.off===null)return null;
+  const rt=performance.now()-NET.off-NET.delay*1000;
+  let a=S[0],b=S[0];
+  if(rt<=S[0].t){a=b=S[0];}
+  else if(rt>=S[S.length-1].t){a=b=S[S.length-1];}
+  else for(let i=1;i<S.length;i++)if(S[i].t>=rt){a=S[i-1];b=S[i];break;}
+  const span=b.t-a.t,u=span>0?clamp((rt-a.t)/span,0,1):0,ext=b===S[S.length-1]&&rt>b.t?Math.min((rt-b.t)/1000,0.12):0;
+  return{a,b,u,ext};
+}
+function applyDiscrete(w){
+  w.e.forEach((a,s)=>{const e=ent(s);if(!Array.isArray(a)||e===P)return;
+    for(const [i,L] of [[6,e.legs.L],[7,e.legs.R]]){const v=a[i];if(Array.isArray(v)){if(!(L.kick>0)||Math.abs(L.kick-v[0])>0.1)L.kick=fin(v[0],0,1)||0;L.kt=clamp(v[1]|0,0,3);L.kd=fin(v[2],0.2,1)||0.3;}}
+    if(e.isK){e.state=a[8]?({d:'dive',h:'hold',c:'recover'}[a[8]]||'ready'):'ready';if(Array.isArray(a[9])){e.t=fin(a[9][0],0,5)||0;e.ddx=fin(a[9][1],-1,1)||0;e.ddy=fin(a[9][2],-1,1)||0;e.dh=fin(a[9][3],0,3)||1;
       e.ds=Math.sign(-Math.sin(e.face)*e.ddx+Math.cos(e.face)*e.ddy)||1;}}});
-  const b=w.b;if(Array.isArray(b)){const x=fin(b[0],-BX,FW+BX),y=fin(b[1],-BY,FH+BY),z=fin(b[2],0,40);
-    if(x!==null&&y!==null&&z!==null){B.vx=fin(b[3],-40,40)||0;B.vy=fin(b[4],-40,40)||0;B.vz=fin(b[5],-40,40)||0;const a2=Math.min(age,0.25);
-      B.x+=(x+B.vx*a2-B.x)*Math.min(1,k*1.2);B.y+=(y+B.vy*a2-B.y)*Math.min(1,k*1.2);B.z+=(Math.max(0,z+B.vz*a2-4.9*a2*a2)-B.z)*Math.min(1,k*1.2);}
-    B.owner=b[6]>=0&&b[6]<10?ent(b[6]):null;B.held=b[7]>=0&&b[7]<10?ent(b[7]):null;B.follow=null;}
+  const b=w.b;
+  if(Array.isArray(b)){const wo=b[6]>=0&&b[6]<10?ent(b[6]):null;
+    if(wo===P&&performance.now()<NET.predUntil){}else if(wo||performance.now()-NET.claimAt>700)B.owner=wo;   // mientras reclamo la pelota, la dejo en mis pies
+    if(wo&&wo!==P)NET.claimAt=0;
+    B.held=b[7]>=0&&b[7]<10?ent(b[7]):null;B.lkS=b[8];if(wo&&wo!==P||B.held)NET.predUntil=0;}
+  if(P.isK&&B.held===P)P.state='hold';
+  if(Array.isArray(w.rs)&&w.rs[1]&&w.rs[1]!==NET.lastRs)showBanner({lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[w.rs[1]]||'',1300,'mid');
+  if(Array.isArray(w.rs))NET.lastRs=w.rs[1];
   if(Array.isArray(w.sc)){const sc=w.sc.join('-');if(NET.lastSc!==null&&sc!==NET.lastSc){const t=(w.sc[0]|0)>score[0]?0:1;showBanner(t===NET.team?'¡GOOOL!':'Gol rival',1900,'big');crowdTo(0.45,0.3);buzz([60,40,160]);}
     NET.lastSc=sc;score[0]=w.sc[0]|0;score[1]=w.sc[1]|0;}
-  if(Array.isArray(w.rs)&&w.rs[1]&&w.rs[1]!==NET.lastRs){showBanner({lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[w.rs[1]]||'',1300,'mid');}
-  if(Array.isArray(w.rs))NET.lastRs=w.rs[1];
   if(Array.isArray(w.wd)){wind.x=fin(w.wd[0],-5,5)||0;wind.y=fin(w.wd[1],-5,5)||0;}
-  if(typeof w.ko==='number'&&w.ko!==NET.seenKo){NET.seenKo=w.ko;const a=w.e[NET.slot];if(Array.isArray(a)&&!hard){P.x=a[0];P.y=a[1];P.vx=P.vy=0;P.face=a[2];cam.yaw=P.face;}}
+  if(typeof w.ko==='number'&&w.ko!==NET.seenKo){const first=NET.seenKo<0;NET.seenKo=w.ko;const a=w.e[NET.slot];if(Array.isArray(a)&&!first){P.x=a[0];P.y=a[1];P.vx=P.vy=0;P.face=a[2];cam.yaw=P.face;}}
+}
+function applyInterp(st,dt){
+  const {a,b,u,ext}=st,L=(p,q)=>p+(q-p)*u;
+  for(let s=0;s<10;s++){const e=ent(s),A=a.e[s],Bb=b.e[s];if(e===P||!Array.isArray(A)||!Array.isArray(Bb))continue;
+    let x=L(A[0],Bb[0])+Bb[3]*ext,y=L(A[1],Bb[1])+Bb[4]*ext;if(!isFinite(x)||!isFinite(y))continue;
+    if(!isFinite(e.x)||Math.hypot(e.x-x,e.y-y)>8){e.x=x;e.y=y;}else{const k=Math.min(1,dt*25);e.x+=(x-e.x)*k;e.y+=(y-e.y)*k;}
+    e.vx=L(A[3],Bb[3]);e.vy=L(A[4],Bb[4]);e.face=A[2]+wrap(Bb[2]-A[2])*u;
+    let ph=A[5]+(Bb[5]-A[5]+(Bb[5]<A[5]-30?62.8:0))*u;if(e.isK)e.ph=ph;else e.armPh=ph;}
+  if(performance.now()<NET.predUntil||B.owner===P)return;   // la pelota la estoy prediciendo yo
+  const A=a.b,Bb=b.b;if(!Array.isArray(A)||!Array.isArray(Bb))return;
+  const x=L(A[0],Bb[0])+Bb[3]*ext,y=L(A[1],Bb[1])+Bb[4]*ext,z=Math.max(0,L(A[2],Bb[2])+Bb[5]*ext);
+  if(!isFinite(x)||!isFinite(y))return;
+  const k=NET.blend>0?Math.min(1,dt*6):1;NET.blend=Math.max(0,NET.blend-dt);
+  B.x+=(x-B.x)*k;B.y+=(y-B.y)*k;B.z+=(z-B.z)*k;B.vx=L(A[3],Bb[3]);B.vy=L(A[4],Bb[4]);B.vz=L(A[5],Bb[5]);
+}
+function applyWorld(w,dt,hard){
+  if(!w||!Array.isArray(w.e)||w.e.length!==10)return;
+  if(hard){w.e.forEach((a,s)=>{const e=ent(s);if(Array.isArray(a)){e.x=a[0];e.y=a[1];e.face=a[2];e.vx=a[3];e.vy=a[4];}});
+    if(Array.isArray(w.b)){B.x=w.b[0];B.y=w.b[1];B.z=w.b[2];B.vx=w.b[3];B.vy=w.b[4];B.vz=w.b[5];B.owner=w.b[6]>=0?ent(w.b[6]):null;B.held=w.b[7]>=0?ent(w.b[7]):null;}
+    if(Array.isArray(w.sc)){score[0]=w.sc[0]|0;score[1]=w.sc[1]|0;}return;}
+  applyDiscrete(w);
 }
 function clientStep(dt,now){
-  const w=netWorld();if(w)applyWorld(w,dt,false);
+  const w=netWorld();if(w&&w!==NET.lastApplied){NET.lastApplied=w;applyWorld(w,dt,false);}
+  const st=interpState();if(st)applyInterp(st,dt);
   if(P.isK)updKeeperCtl(P,dt);else updControl(dt);
   for(const e of allEnts())if(e!==P)for(const L of [e.legs.L,e.legs.R])if(L.kick>0)L.kick-=dt;
-  if(P.pk){P.pk.t-=dt;if(P.pk.t<=0)P.pk=null;}
+  if(P.pk){P.pk.t-=dt;if(P.pk.t<=0){const r=P.pk.run;P.pk=null;if(r)r();}}
+  // predicción local: si la pelota llega a mis pies, la tomo ya (el anfitrión lo confirma)
+  if(!B.owner&&!B.held&&B.lkS!==NET.slot&&!P.isK&&B.z<0.6&&Math.hypot(B.x-P.x,B.y-P.y)<=REACH&&mode==='play'&&performance.now()>NET.predUntil){B.owner=P;NET.claimAt=performance.now();cam.goal=P.face;netSendMe(true);}
+  // pelota pateada por mí: la simulo localmente para que salga al instante
+  if(B.follow){SIM=true;try{followStep(dt);}finally{SIM=false;}if(!B.follow){NET.blend=0.4;}}
+  else if(performance.now()<NET.predUntil){SIM=true;try{updBall(dt);}finally{SIM=false;}}
   if(B.owner&&B.owner.team!==P.team&&!P.isK){const dx=P.x-B.owner.x,dy=P.y-B.owner.y,d=Math.hypot(dx,dy);if(d<3&&d>1e-4){P.x=B.owner.x+dx/d*3;P.y=B.owner.y+dy/d*3;}}
   updAim();
   if(B.R){const s=Math.hypot(B.vx,B.vy);if(s>0.05)B.R=Mx.mul(Mx.Raxis(B.vy,0,-B.vx,s/BR*dt),B.R);}
-  if(B.owner&&B.owner!==P){const o=B.owner;B.x=o.x+Math.cos(o.face)*0.55;B.y=o.y+Math.sin(o.face)*0.55;}
-  if(B.owner===P&&!P.pk){if(cam.goal==null)P.face=cam.yaw;B.x=P.x+Math.cos(P.face)*0.55;B.y=P.y+Math.sin(P.face)*0.55;}
+  if(B.owner&&B.owner!==P){const o=B.owner;B.x=o.x+Math.cos(o.face)*0.55;B.y=o.y+Math.sin(o.face)*0.55;B.z=0;}
+  if(B.owner===P&&!P.pk){if(cam.goal==null)P.face=cam.yaw;const tx=P.x+Math.cos(P.face)*0.55,ty=P.y+Math.sin(P.face)*0.55,k=Math.min(1,dt*12);B.x+=(tx-B.x)*k;B.y+=(ty-B.y)*k;B.z=0;}
   if(Math.hypot(B.vx,B.vy,B.vz)>7&&!B.held){B.trail.push([B.x,B.y,B.z]);if(B.trail.length>26)B.trail.shift();}else if(B.trail.length)B.trail.shift();
   for(const q of parts){q.t+=dt;q.vz-=9.81*q.g*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.z+=q.vz*dt;if(q.z<0){q.z=0;q.vx*=0.3;q.vy*=0.3;q.vz=0;}}
   for(let i=parts.length-1;i>=0;i--)if(parts[i].t>1.6)parts.splice(i,1);
   shake.v*=Math.pow(0.02,dt);
   netSendMe(false);
 }
+
 /* ---------- panel online ---------- */
 function netPanel(){
   let el=document.getElementById('netp');
@@ -477,7 +553,10 @@ function doKick(sol){
   if(!ballNear()){showBanner('Muy lejos',700,'small');return;}
   updAim();sol=aim.sol||sol;if(!sol)return;
   if(NET.on&&!NET.host){NET.kickN++;NET.pend.k={n:NET.kickN,s:NET.slot,q:sol.q};netSendMe(true);
-    const F=pathFromParams(B.x,B.y,sol.q),t0=pathAt(F,0.01);startKick(P,Math.atan2(t0.ty,t0.tx),F.v0,F.hm===2,()=>{});}
+    const F0=pathFromParams(B.x,B.y,sol.q),t0=pathAt(F0,0.01),q=sol.q,me=P;
+    startKick(P,Math.atan2(t0.ty,t0.tx),F0.v0,F0.hm===2,()=>{const F=pathFromParams(B.x,B.y,q);B.owner=null;NET.claimAt=0;
+      B.follow={pts:F.pts,cum:F.cum,len:F.len,s:0,v:F.v0,v0:F.v0,vEnd:F.vEnd,acc:F.acc,h:F.h,ex:0,ey:0,kp:me};B.lkS=NET.slot;
+      NET.predUntil=performance.now()+1000*Math.min(4,F.len/Math.max(3,(F.v0+F.vEnd)/2)+0.6);sKick(F.v0/33);});}
   else kickWithParams(P,sol.q);
   const kmh=Math.round(sol.v*3.6);lastKick={kmh,leg:'R',chip:sol.hm===2};lastKickT=performance.now();
   if(kmh>record){record=kmh;try{localStorage.setItem('fd_rec',record)}catch(_){}}
