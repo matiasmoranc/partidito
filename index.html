@@ -54,6 +54,7 @@ function applyAct(S,a){
       const dx=tx-b.x,dy=ty-b.y,d=sq(dx*dx+dy*dy);if(d<0.3)return;const v=VMIN+pw*(VMAX*S.cfg.pm-VMIN);
       b.vx=dx/d*v;b.vy=dy/d*v;b.o=-1;b.lk=i;b.lkT=9999;pe.st='fly';}
     return;}
+  if(a.k==='s'){P.path=null;P.pi=0;return;}   // frenar: se queda donde está
   if(a.k==='m'){
     if(b.o===i||S.rs)return;
     if(!Array.isArray(a.path)||!a.path.length)return;
@@ -531,7 +532,8 @@ cv.addEventListener('pointermove',e=>{
   if(hold&&e.pointerId===hold.id)hold.f=toF(x,y);
 });
 function up(e){
-  if(drag&&e.pointerId===drag.id){const d=drag;drag=null;if(d.pts.length>1&&e.type==='pointerup')act({k:'m',i:d.i,path:d.pts.slice(1,61)});}
+  if(drag&&e.pointerId===drag.id){const d=drag;drag=null;if(d.pts.length>1&&e.type==='pointerup')act({k:'m',i:d.i,path:d.pts.slice(1,61)});
+    else if(e.type==='pointerup'&&G.S.p[d.i].path){act({k:'s',i:d.i});snd(400,300,0.05,0.05);}}
   if(tap&&e.pointerId===tap.id){const t=tap;tap=null;if(Math.hypot(e.clientX-t.x,e.clientY-t.y)<14){passMode=t.cancel?false:true;if(passMode)snd(600,800,0.05,0.06);}}
   if(hold&&e.pointerId===hold.id){const h=hold,pw=Math.round(holdPower()*100)/100;hold=null;if(e.type==='pointerup'){const b=G.S.b;
       if(b.o>=0&&team(b.o)===G.myTeam){act({k:'p',i:b.o,tx:Math.round(h.f.x*10)/10,ty:Math.round(h.f.y*10)/10,pw});snd(140,60,0.3+pw*0.4,0.12);}passMode=false;}}
@@ -612,7 +614,7 @@ function menu(){
     banner(['Nivel fácil','Nivel medio','Nivel difícil'][CFG.lvl],1200);let done=false;try{done=localStorage.getItem('pt_tut')==='1';}catch(e){}if(!done)tutorial(0);});
   onId('ol',()=>panel());onId('tu',()=>tutorial(0));
 }
-const TUT=[['👆','Mové a tus jugadores','Arrastrá un jugador con el dedo: recorre la línea que dibujes. Los jugadores no se mueven solos.'],
+const TUT=[['👆','Mové a tus jugadores','Arrastrá un jugador con el dedo: recorre la línea que dibujes. Los jugadores no se mueven solos. Si lo tocás mientras corre, se frena ahí.'],
   ['🎯','Pasá la pelota','Tocá al que tiene la pelota y después mantené apretado donde querés pasar. Más tiempo apretado = más fuerte: la barrita va de verde a rojo.'],
   ['⏱️','Tenés 10 segundos','El que tiene la pelota no se puede mover y tiene 10 segundos para pasarla (mirá el anillo). Si no, lateral para el rival. Tus compañeros tampoco se le pueden pegar.'],
   ['🛡️','Defendé','El rival no puede entrar al círculo punteado del que tiene la pelota: para recuperarla tenés que cortar los pases. Solo el arquero puede ir a sacársela: si toca la pelota, es suya.'],

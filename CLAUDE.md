@@ -23,7 +23,7 @@ El dueño escribe en español rioplatense (Uruguay); respondé y escribí los te
 
 ## Arquitectura de `index.html`
 - **Simulación determinista** (`stepSim`, `applyAct`, `newState`, `cloneS`): paso fijo de 1/60 s. Mismos eventos ⇒ mismo partido en todos los teléfonos. No usar `Math.hypot`, trigonometría ni azar dentro de la simulación (solo `Math.sqrt`); la IA y el dibujo pueden usar lo que quieran.
-- **Eventos** (`act`, `insertEvent`, `advanceTo`, `rollback`): cada acción (`{k:'m', i, path}` mover, `{k:'p', i, tx, ty, pw}` pasar) lleva un `tick`. Si llega tarde, se rebobina con el historial `G.hist` y se recalcula.
+- **Eventos** (`act`, `insertEvent`, `advanceTo`, `rollback`): cada acción (`{k:'m', i, path}` mover, `{k:'s', i}` frenar (tocar a un jugador que corre), `{k:'p', i, tx, ty, pw}` pasar) lleva un `tick`. Si llega tarde, se rebobina con el historial `G.hist` y se recalcula.
 - **IA** (`aiThink(S,t,lvl)`): juega los equipos sin humanos (contra la PC, o equipo vacío en el online) y genera acciones normales. Niveles en `AIL` (0 fácil, 1 medio, 2 difícil; `CFG.lvl`, local): cada cuánto piensa, cuánto retiene, error, distancia de tiro, presión y cobertura de líneas de pase. Evalúa pases con `margin` (si un rival llega a cortarlo), hace pases al espacio y manda al receptor a buscarlos; corta pases calculando dónde llega antes; respeta los 6 s; en penales elige rincón / se tira al azar.
 - **Menú y tutorial** (`menu`, `tutorial`, `endPanel`): el menú sale al abrir y con ☰; contra la PC el partido se pausa con cualquier panel abierto. Tutorial la primera vez (localStorage `pt_tut`).
 - **Online** (`NET`, `netConnect`, `netJoin`, `onMsg`, `netTick`):

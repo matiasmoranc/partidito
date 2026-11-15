@@ -5,7 +5,7 @@ Fútbol táctico 5 contra 5 para el celular: toda la cancha en vertical, como un
 **Jugar:** https://matiasmoranc.github.io/partidito/
 
 ## Cómo se juega
-- **Mover jugadores:** arrastrá un jugador tuyo: va a recorrer exactamente la línea que dibujaste. Los jugadores no se mueven solos.
+- **Mover jugadores:** arrastrá un jugador tuyo: va a recorrer exactamente la línea que dibujaste. Los jugadores no se mueven solos. Si lo tocás mientras corre, se frena ahí.
 - **La pelota se pega:** apenas toca el borde de un jugador (de cualquier equipo), queda en sus pies.
 - **Zona del que tiene la pelota:** los rivales se frenan a 5 m del que la tiene y solo pueden cortar pases. Los compañeros se frenan 1,5 m más lejos.
 - **El arquero sí puede ir a sacarla:** si el arquero rival toca la pelota del que la tiene, es suya.
