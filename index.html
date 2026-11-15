@@ -464,7 +464,7 @@ function draw(now){
   // pase: línea y alcance según la potencia
   if(passMode&&b.o>=0&&team(b.o)===G.myTeam){
     const tgt=hold?hold.f:null;
-    if(tgt){const pw=holdPower(now),v=VMIN+pw*(VMAX*S.cfg.pm-VMIN),dist=v*v/(2*AB),dx=tgt.x-b.x,dy=tgt.y-b.y,l=sq(dx*dx+dy*dy)||1,ex=b.x+dx/l*dist,ey=b.y+dy/l*dist;
+    if(tgt){const pw=holdPower(now),v=VMIN+pw*(VMAX*S.cfg.pm-VMIN),dist=v*v/(2*AB),dx=tgt.x-b.x,dy=tgt.y-b.y,l=sq(dx*dx+dy*dy)||1,dd=Math.min(dist,l),ex=b.x+dx/l*dd,ey=b.y+dy/l*dd;   // la línea de color termina donde tocaste (o antes, si no llega)
       const s0=toS(b.x,b.y),s1=toS(ex,ey),st=toS(tgt.x,tgt.y);
       ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(s0.x,s0.y);ctx.lineTo(st.x,st.y);ctx.stroke();
       const pc=`hsl(${Math.round(120*(1-pw))},95%,52%)`;
