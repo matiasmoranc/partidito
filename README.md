@@ -11,11 +11,14 @@ Fútbol táctico 5 contra 5 para el celular: toda la cancha en vertical, como un
 - **Saque del medio:** el rival no puede cruzar la mitad de la cancha hasta que el equipo que saca haga el primer pase.
 - **Saque de arco:** el rival no puede entrar al área grande hasta que el arquero saque.
 - **Pasar o patear:** tocá una vez al que tiene la pelota, después tocá y mantené el lugar adonde querés pasarla. Cuanto más mantenés, más fuerte (con un máximo). Mientras mantenés ves hasta dónde va a llegar.
+- **6 segundos:** el que tiene la pelota tiene 6 s para pasarla (el anillo de color alrededor). Si no, lateral para el rival a la altura de la pelota.
+- **Partido con reloj:** dos tiempos de 5 minutos. Si empatan, 2 minutos de alargue y después penales. Al final, *Revancha*.
+- **Penales:** el que patea toca al pateador y mantiene apretado en el arco; el que ataja toca adónde se tira su arquero (el rival no lo ve).
 - Hay goles, laterales, córners y saques de arco.
 - **⚙ Ajustes:** distancia de marca del rival, potencia máxima del pase y tiempo de carga del pase.
 
 ## Contra la PC u online
-- Por defecto jugás contra la PC.
+- Al abrir aparece el menú (☰): elegí el nivel de la PC (fácil, medio o difícil), *Jugar contra la PC* o *Jugar online*. La primera vez hay un tutorial corto.
 - **👥 ONLINE → ⚡ Partida rápida:** entra a una sala abierta si hay alguna; si no, crea una y jugás contra la PC hasta que entre alguien.
 - **Salas abiertas:** la lista muestra las salas que están esperando gente; tocá *Entrar* y te pone en el equipo con menos personas. *Crear sala abierta* abre una nueva que todos ven.
 - **Sala privada con código:** no aparece en la lista; mandá el link para que entren. Los del mismo equipo comparten los jugadores; un equipo sin personas lo juega la PC.
