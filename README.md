@@ -7,11 +7,12 @@ Fútbol táctico 5 contra 5 para el celular: toda la cancha en vertical, como un
 ## Cómo se juega
 - **Mover jugadores:** arrastrá un jugador tuyo: va a recorrer exactamente la línea que dibujaste. Los jugadores no se mueven solos.
 - **La pelota se pega:** apenas toca el borde de un jugador (de cualquier equipo), queda en sus pies.
-- **Zona del que tiene la pelota:** los rivales se frenan a 5 m del que la tiene; solo pueden cortar pases.
+- **Zona del que tiene la pelota:** los rivales se frenan a 5 m del que la tiene y solo pueden cortar pases. Los compañeros se frenan 1,5 m más lejos.
+- **El arquero sí puede ir a sacarla:** si el arquero rival toca la pelota del que la tiene, es suya.
 - **Saque del medio:** el rival no puede cruzar la mitad de la cancha hasta que el equipo que saca haga el primer pase.
 - **Saque de arco:** el rival no puede entrar al área grande hasta que el arquero saque.
 - **Pasar o patear:** tocá una vez al que tiene la pelota, después tocá y mantené el lugar adonde querés pasarla. Cuanto más mantenés, más fuerte (con un máximo). Mientras mantenés ves hasta dónde va a llegar.
-- **6 segundos:** el que tiene la pelota tiene 6 s para pasarla (el anillo de color alrededor). Si no, lateral para el rival a la altura de la pelota.
+- **10 segundos:** el que tiene la pelota tiene 10 s para pasarla (el anillo de color alrededor). Si no, lateral para el rival a la altura de la pelota.
 - **Partido con reloj:** dos tiempos de 5 minutos. Si empatan, 2 minutos de alargue y después penales. Al final, *Revancha*.
 - **Penales:** el que patea toca al pateador y mantiene apretado en el arco; el que ataja toca adónde se tira su arquero (el rival no lo ve).
 - Hay goles, laterales, córners y saques de arco.

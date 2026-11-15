@@ -22,7 +22,7 @@ canvas{display:block;touch-action:none;position:fixed;left:0;top:0}
 'use strict';
 /* =================== SIMULACIÓN (determinista: mismos eventos => mismo partido en todos los teléfonos) =================== */
 const FW=105,FH=68,CY=34,PO=3.66,DT=1/60,VP=6.8,VK=5.6,AB=2.6,VMIN=4.6,VMAX=27.6,RST=1.9,RKP=2.4,BLOCK=5,VDIVE=8.5;
-const HALF=Math.round((window.__HALF||300)*60),ET=Math.round((window.__ET||120)*60),HOLD=360;   // 5 min por tiempo, 2 min de alargue, 6 s para pasar
+const HALF=Math.round((window.__HALF||300)*60),ET=Math.round((window.__ET||120)*60),HOLD=600,MATE=1.5;   // 5 min por tiempo, 2 min de alargue, 10 s para pasar; compañeros a la marca + 1,5 m
 let CFG={bl:5,pm:1,ch:1.1,lvl:1};try{const c=JSON.parse(localStorage.getItem('pt_cfg')||'{}');if(c.bl)CFG.bl=c.bl;if(c.pm)CFG.pm=c.pm;if(c.ch)CFG.ch=c.ch;if(c.lvl>=0&&c.lvl<=2)CFG.lvl=c.lvl|0;}catch(e){}
 const saveCfg=()=>{try{localStorage.setItem('pt_cfg',JSON.stringify(CFG));}catch(e){}};
 const sq=Math.sqrt,clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -71,7 +71,7 @@ function inArea(t,x,y){return y>CY-20.16&&y<CY+20.16&&(t?x>FW-16.5:x<16.5);}
 // ¿este paso lo lleva a un lugar prohibido? (cerca del que tiene la pelota, cruzar la mitad en el saque, entrar al área en el saque de arco)
 function blocked(S,i,x,y){
   const b=S.b,t=team(i);
-  if(b.o>=0&&team(b.o)!==t){const c=S.p[b.o],dx=x-c.x,dy=y-c.y,P=S.p[i],ox=P.x-c.x,oy=P.y-c.y;const R=S.cfg.bl;if(dx*dx+dy*dy<R*R&&dx*dx+dy*dy<ox*ox+oy*oy)return true;}
+  if(b.o>=0&&b.o!==i&&!(isK(i)&&team(b.o)!==t)){const c=S.p[b.o],dx=x-c.x,dy=y-c.y,P=S.p[i],ox=P.x-c.x,oy=P.y-c.y;const R=team(b.o)===t?S.cfg.bl+MATE:S.cfg.bl;if(dx*dx+dy*dy<R*R&&dx*dx+dy*dy<ox*ox+oy*oy)return true;}
   if(S.ko&&S.ko.team!==t){if(t===0?x>FW/2-0.5:x<FW/2+0.5)return true;}
   if(S.gk&&S.gk.team!==t&&inArea(S.gk.team,x,y)&&!inArea(S.gk.team,S.p[i].x,S.p[i].y))return true;
   return false;
@@ -91,10 +91,12 @@ function stepSim(S){
     if(isK(i)){const kb=keeperBox(i);if(P.x<kb[0]||P.x>kb[1]||P.y<CY-20.16||P.y>CY+20.16){P.x=clamp(P.x,kb[0],kb[1]);P.y=clamp(P.y,CY-20.16,CY+20.16);}}
     P.x=clamp(P.x,-3,FW+3);P.y=clamp(P.y,-3,FH+3);}
   if(b.o>=0){const c=S.p[b.o];
-    for(let j=0;j<10;j++){if(team(j)===team(b.o))continue;const P=S.p[j],dx=P.x-c.x,dy=P.y-c.y,d=sq(dx*dx+dy*dy);
-      if(d<S.cfg.bl){const m=Math.min(S.cfg.bl-d,VP*DT);if(d<1e-6){P.x+=team(j)?m:-m;}else{P.x+=dx/d*m;P.y+=dy/d*m;}if(P.path&&blocked(S,j,P.path[P.pi][0],P.path[P.pi][1])){P.path=null;P.pi=0;}}}
+    for(let j=0;j<10;j++){const same=team(j)===team(b.o);if(j===b.o||isK(j)&&!same)continue;const P=S.p[j],dx=P.x-c.x,dy=P.y-c.y,d=sq(dx*dx+dy*dy),R=same?S.cfg.bl+MATE:S.cfg.bl;
+      if(d<R){const m=Math.min(R-d,VP*DT);if(d<1e-6){P.x+=team(j)?m:-m;}else{P.x+=dx/d*m;P.y+=dy/d*m;}if(P.path&&blocked(S,j,P.path[P.pi][0],P.path[P.pi][1])){P.path=null;P.pi=0;}}}
     b.x=c.x;b.y=c.y;b.vx=0;b.vy=0;
-    // 6 segundos para pasarla: si no, lateral para el rival a la altura de la pelota
+    // el arquero rival sí puede acercarse: si toca la pelota, se la saca
+    if(!S.rs){const k=(1-team(b.o))*5,K=S.p[k],kx=K.x-c.x,ky=K.y-c.y;if(kx*kx+ky*ky<RST*RST){b.o=k;b.lt=team(k);b.lk=-1;b.lkT=0;S.ko=null;S.gk=null;K.path=null;K.pi=0;}}
+    // 10 segundos para pasarla: si no, lateral para el rival a la altura de la pelota
     if(S.hO!==b.o){S.hO=b.o;S.hT=0;}else if(!S.rs&&++S.hT>=HOLD){const t=team(b.o);S.rs={type:'lateral',team:1-t,x:clamp(b.x,0.5,FW-0.5),y:b.y<CY?0.5:FH-0.5,t:45,why:'6s'};b.o=-1;b.lt=t;S.rsN++;S.hO=-1;S.hT=0;}}
   else if(!S.rs){S.hO=-1;
     const s=sq(b.vx*b.vx+b.vy*b.vy);if(s>0){const ns=s-AB*DT;if(ns<=0){b.vx=0;b.vy=0;}else{b.vx*=ns/s;b.vy*=ns/s;}}
@@ -148,7 +150,7 @@ function penDone(pe){const [n0,n1]=pe.n,[g0,g1]=pe.g;
   return n0===n1&&n0>=5&&g0!==g1;}
 function penStep(S){
   const pe=S.pen,b=S.b;
-  if(pe.st==='aim'){if(--pe.t<=0)penResult(S,false,'¡Se le pasaron los 6 segundos!');return;}
+  if(pe.st==='aim'){if(--pe.t<=0)penResult(S,false,'¡Se le pasaron los 10 segundos!');return;}
   if(pe.st==='res'){if(--pe.t<=0){if(penDone(pe))endGame(S,pe.g[0]>pe.g[1]?0:1);else{pe.kt=1-pe.kt;penSetup(S);}}return;}
   // la pelota va al arco y el arquero se tira adonde eligió
   const D=S.p[pe.dk];if(pe.dive!==null){const dy=pe.dive-D.y,st=VDIVE*DT;D.y+=Math.abs(dy)<=st?dy:(dy>0?st:-st);}
@@ -193,8 +195,8 @@ function aiThink(S,t,lvl){
   if(carrier>=0){
     const c=P[carrier],key=carrier+'/'+(S.tick-S.hT);
     if(aiPlan['h'+t]!==key){aiPlan['h'+t]=key;aiPlan['ht'+t]=L.hold[0]+(rnd()*(L.hold[1]-L.hold[0])|0);}
-    if(S.hT>=aiPlan['ht'+t]||S.hT>=300){
-      const dg=sq((gx-c.x)**2+(CY-c.y)**2),urgent=S.hT>=270;let done=false;
+    if(S.hT>=aiPlan['ht'+t]||S.hT>=HOLD-60){
+      const dg=sq((gx-c.x)**2+(CY-c.y)**2),urgent=S.hT>=HOLD-90;let done=false;
       // patear al arco al rincón más libre
       if(dg<L.shoot&&!isK(carrier)){let bm=-1e9,by=CY;for(const sy of [CY-(PO-0.6),CY+(PO-0.6)]){const m=margin(c.x,c.y,gx+dir*1,sy,vmax)+rnd()*0.3;if(m>bm){bm=m;by=sy;}}
         if(bm>-0.3||dg<12||L.lane===0&&rnd()<0.6){acts.push({k:'p',i:carrier,tx:gx+dir*1,ty:+(by+(rnd()-0.5)*L.err*2).toFixed(1),pw:1});done=true;}}
@@ -239,6 +241,7 @@ function aiThink(S,t,lvl){
   // marcar: cada uno toma al rival libre más cercano y se para en la línea de pase
   const free=opp.filter(o=>o!==carrierO&&!isK(o)),used={};
   for(const m of mine){if(m===chaser||m===presser)continue;const q=P[m];
+    if(isK(m)&&carrierO>=0){const c=P[carrierO],kb=keeperBox(m);if(c.x>=kb[0]-1&&c.x<=kb[1]+1&&Math.abs(c.y-CY)<21){goTo(m,c.x,c.y);continue;}}
     if(isK(m)){ // arquero: si viene un tiro, ir a donde cruza la línea
       if(L.lane>=1&&carrierO<0&&spd>3&&(ogx-b.x)*b.vx>0){const tt=(ogx-b.x)/b.vx;const y=b.y+b.vy*tt;if(tt<2.5&&Math.abs(y-CY)<PO+3){goTo(m,ogx+dir*1,clamp(y,CY-PO,CY+PO));continue;}}
       const sp=keeperSpot();goTo(m,sp[0],sp[1]);continue;}
@@ -442,7 +445,8 @@ function draw(now){
   if(S.ko){const a1=toS(FW/2,0),a2=toS(FW/2,FH);ctx.strokeStyle='rgba(255,230,120,.9)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(a1.x,a1.y);ctx.lineTo(a2.x,a2.y);ctx.stroke();}
   if(S.gk){const lx=S.gk.team?FW:0,d=S.gk.team?-1:1,c1=toS(lx,CY-20.16),c2=toS(lx+d*16.5,CY+20.16);ctx.fillStyle='rgba(255,230,120,.18)';ctx.fillRect(Math.min(c1.x,c2.x),Math.min(c1.y,c2.y),Math.abs(c2.x-c1.x),Math.abs(c2.y-c1.y));}
   // zona prohibida alrededor del que tiene la pelota
-  if(b.o>=0){const c=toS(b.x,b.y);ctx.strokeStyle='rgba(255,255,255,.45)';ctx.setLineDash([3,4]);ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(c.x,c.y,S.cfg.bl*SC,0,7);ctx.stroke();ctx.setLineDash([]);}
+  if(b.o>=0){const c=toS(b.x,b.y);ctx.strokeStyle='rgba(255,255,255,.45)';ctx.setLineDash([3,4]);ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(c.x,c.y,S.cfg.bl*SC,0,7);ctx.stroke();
+    if(team(b.o)===G.myTeam){ctx.strokeStyle='rgba(125,255,160,.35)';ctx.beginPath();ctx.arc(c.x,c.y,(S.cfg.bl+MATE)*SC,0,7);ctx.stroke();}ctx.setLineDash([]);}
   // jugadores
   for(let i=0;i<10;i++){const q=S.p[i],s=toS(q.x,q.y),t=team(i),r=PR();
     ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.arc(s.x+2,s.y+2,r,0,7);ctx.fill();
@@ -450,7 +454,7 @@ function draw(now){
     ctx.fillStyle=isK(i)?'#111':COL[t].t;ctx.font=`bold ${Math.round(r*1.05)}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(NUM[i%5],s.x,s.y+1);
     if(b.o===i){ctx.strokeStyle=t===G.myTeam?'#7dffa0':'#ffb3ad';ctx.lineWidth=3;ctx.beginPath();ctx.arc(s.x,s.y,r+5+Math.sin(now*0.01)*1.5,0,7);ctx.stroke();}
     if(passMode&&b.o===i){ctx.strokeStyle='#ffe678';ctx.lineWidth=3;ctx.setLineDash([4,3]);ctx.beginPath();ctx.arc(s.x,s.y,r+11,0,7);ctx.stroke();ctx.setLineDash([]);}}
-  // reloj de 6 segundos alrededor del que tiene la pelota
+  // reloj de 10 segundos alrededor del que tiene la pelota
   if(b.o>=0&&!S.rs&&(S.ph==='pen'?S.pen.st==='aim':S.ph!=='end')){const left=S.ph==='pen'?S.pen.t:HOLD-S.hT,fr=clamp(left/HOLD,0,1),c=toS(b.x,b.y),r=PR()+9;
     ctx.strokeStyle=`hsl(${Math.round(120*fr)},95%,55%)`;ctx.lineWidth=3.5;ctx.beginPath();ctx.arc(c.x,c.y,r,-Math.PI/2,-Math.PI/2+fr*Math.PI*2);ctx.stroke();
     if(left<=180){ctx.font='bold 14px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.7)';const tx=Math.ceil(left/60)+'';ctx.strokeText(tx,c.x,c.y-r-9);ctx.fillStyle='#fff';ctx.fillText(tx,c.x,c.y-r-9);}}
@@ -580,7 +584,7 @@ function settings(){
   const row=(id,label,min,max,step,val,fmt)=>`<p style="margin:14px 0 4px;color:#fff">${label}: <b id="${id}v">${fmt(val)}</b></p><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${val}" style="width:100%;padding:0">`;
   pbox.innerHTML='<h2 style="margin:0 0 6px">⚙ Ajustes</h2>'
     +row('bl','Distancia de marca del rival',2,10,0.5,c.bl,v=>(+v).toFixed(1)+' m')
-    +'<p style="margin:2px 0 0;font-size:13px">Hasta dónde se puede acercar el rival al que tiene la pelota (el círculo punteado).</p>'
+    +'<p style="margin:2px 0 0;font-size:13px">Hasta dónde se puede acercar el rival al que tiene la pelota (el círculo punteado). Tus compañeros quedan 1,5 m más lejos y el arquero rival sí puede ir a sacársela.</p>'
     +row('pm','Potencia máxima del pase',60,140,5,Math.round(c.pm*100),v=>v+'%')
     +row('ch','Tiempo para llegar a la potencia máxima',0.4,2.5,0.1,CFG.ch,v=>(+v).toFixed(1)+' s')
     +'<p style="margin:2px 0 0;font-size:13px">Más tiempo = más fácil dosificar pases suaves. Los dos primeros ajustes valen para todos los del partido online; el tiempo de carga es solo tuyo.</p>'
@@ -610,8 +614,8 @@ function menu(){
 }
 const TUT=[['👆','Mové a tus jugadores','Arrastrá un jugador con el dedo: recorre la línea que dibujes. Los jugadores no se mueven solos.'],
   ['🎯','Pasá la pelota','Tocá al que tiene la pelota y después mantené apretado donde querés pasar. Más tiempo apretado = más fuerte: la barrita va de verde a rojo.'],
-  ['⏱️','Tenés 6 segundos','El que tiene la pelota no se puede mover y tiene 6 segundos para pasarla (mirá el anillo). Si no, lateral para el rival.'],
-  ['🛡️','Defendé','El rival no puede entrar al círculo punteado del que tiene la pelota: para recuperarla tenés que cortar los pases.'],
+  ['⏱️','Tenés 10 segundos','El que tiene la pelota no se puede mover y tiene 10 segundos para pasarla (mirá el anillo). Si no, lateral para el rival. Tus compañeros tampoco se le pueden pegar.'],
+  ['🛡️','Defendé','El rival no puede entrar al círculo punteado del que tiene la pelota: para recuperarla tenés que cortar los pases. Solo el arquero puede ir a sacársela: si toca la pelota, es suya.'],
   ['🏆','El partido','Dos tiempos de 5 minutos. Si empatan, 2 minutos de alargue y después penales. En los penales, el que ataja toca adónde se tira su arquero.']];
 function tutorial(k){
   G.panelKind='tut';const t=TUT[k],last=k===TUT.length-1;
@@ -646,7 +650,7 @@ function frame(now){
   // efectos según cambios del partido
   const S=G.S,sc=S.sc.join('-');
   if(sc!==G.lastSc){const [a,c]=G.lastSc.split('-').map(Number);if(S.sc[0]>a||S.sc[1]>c){const t=S.sc[0]>a?0:1;banner(t===G.myTeam?'¡GOOOL!':'Gol rival',1900,true);snd(500,900,0.15,0.6,'sawtooth');}G.lastSc=sc;}
-  if(S.rsN!==G.lastRsN){G.lastRsN=S.rsN;if(S.rs&&S.rs.type!=='goal'&&S.rs.type!=='half'){banner(S.rs.why==='6s'?'¡6 segundos! Lateral '+(S.rs.team===G.myTeam?'tuyo':'del rival'):{lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[S.rs.type],1500);snd(2900,2700,0.05,0.2,'square');}}
+  if(S.rsN!==G.lastRsN){G.lastRsN=S.rsN;if(S.rs&&S.rs.type!=='goal'&&S.rs.type!=='half'){banner(S.rs.why==='6s'?'¡10 segundos! Lateral '+(S.rs.team===G.myTeam?'tuyo':'del rival'):{lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[S.rs.type],1500);snd(2900,2700,0.05,0.2,'square');}}
   if(S.msgN!==G.lastMsgN){G.lastMsgN=S.msgN;if(S.msg){const big=/GOL|Final|Penales|Revancha/.test(S.msg);banner(S.msg,1900,big);if(S.msg==='¡GOL!')snd(500,900,0.15,0.6,'sawtooth');else snd(2900,2400,0.06,0.35,'square');}}
   if(S.ph==='pen'){const k=S.pen.n[0]+S.pen.n[1];if(G.diveFor!==k){G.diveFor=k;G.myDive=null;}}
   if(S.ph==='end'&&!G.endShown){G.endShown=true;passMode=false;hold=null;drag=null;setTimeout(()=>{if(G.S.ph==='end')endPanel();},1200);}
