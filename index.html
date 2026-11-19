@@ -28,7 +28,7 @@ canvas{display:block;touch-action:none;position:fixed;left:0;top:0}
 (()=>{
 'use strict';
 /* =================== SIMULACIÓN (determinista: mismos eventos => mismo partido en todos los teléfonos) =================== */
-const FW=105,FH=68,CY=34,PO=3.66,DT=1/60,VP=6.8,VK=5.6,AB=2.6,VMIN=4.6,VMAX=27.6,RST=1.9,RKP=2.4,BLOCK=5,VDIVE=8.5;
+const FW=105,FH=68,CY=34,PO=4.21,DT=1/60,VP=6.8,VK=5.6,AB=2.6,VMIN=4.6,VMAX=27.6,RST=1.9,RKP=2.4,BLOCK=5,VDIVE=8.5;
 const HALF=Math.round((window.__HALF||300)*60),ET=Math.round((window.__ET||120)*60),HOLD=600,MATE=1.5,KWS=14,KWL=24,VLONG=17;   // preparación del pase: corto 0,23 s, largo (≥17 m/s) 0,4 s
 //   // 5 min por tiempo, 2 min de alargue, 10 s para pasar; compañeros a la marca + 1,5 m
 let CFG={bl:5,pm:1,ch:1.1,lvl:1,cam:1,ang:1,wv:0};try{const c=JSON.parse(localStorage.getItem('pt_cfg')||'{}');if(c.bl)CFG.bl=c.bl;if(c.pm)CFG.pm=c.pm;if(c.ch)CFG.ch=c.ch;if(c.lvl>=0&&c.lvl<=2)CFG.lvl=c.lvl|0;if(c.cam>=0&&c.cam<=3)CFG.cam=c.cam|0;if(c.ang===0||c.ang===1)CFG.ang=c.ang;if(c.wv>=16&&c.wv<=90)CFG.wv=+c.wv;}catch(e){}
@@ -424,7 +424,7 @@ function netTick(){
 // Todo lo de acá es solo dibujo: no toca la simulación, así que puede usar trigonometría y azar.
 const g3=document.getElementById('g');let gl=null;
 try{gl=g3.getContext('webgl',{antialias:true,stencil:true,alpha:false,powerPreference:'high-performance'})||g3.getContext('experimental-webgl',{stencil:true});}catch(e){gl=null;}
-const MS=2.0,BR=0.25,D2R=Math.PI/180;   // escala de los jugadores, radio (visual) de la pelota
+const MS=2.0,BR=0.25,D2R=Math.PI/180,GH=4.6,GHB=4.2,GD=2.8;   // alto del travesaño, alto atrás y fondo del arco (más alto que el arquero)   // escala de los jugadores, radio (visual) de la pelota
 const CAMW=[28,40,62];                  // ancho visible por zoom: cerca, medio, lejos (3 = mapa 2D)
 const is3D=()=>!!gl&&CFG.cam!==3;
 // ---- matrices 4x4 (column-major) ----
@@ -515,8 +515,8 @@ function buildWorld(){
   // arcos (palos y travesaño)
   const post=[.98,.98,.98],pr=.07;
   for(const sd of [0,1]){const lx=sd?FW:0,d=sd?-1:1;
-    for(const yy of [CY-PO,CY+PO]){const a=P(lx,yy,0);g.box(a[0]-pr,0,a[2]-pr,a[0]+pr,2.44,a[2]+pr,post);const b2=P(lx-d*2,yy,0);g.box(b2[0]-.03,0,b2[2]-.03,b2[0]+.03,2.2,b2[2]+.03,[.85,.85,.85]);}
-    const c1=P(lx,CY-PO,0),c2=P(lx,CY+PO,0);g.box(Math.min(c1[0],c2[0])-pr,2.44-pr,c1[2]-pr,Math.max(c1[0],c2[0])+pr,2.44+pr,c1[2]+pr,post);}
+    for(const yy of [CY-PO,CY+PO]){const a=P(lx,yy,0);g.box(a[0]-pr,0,a[2]-pr,a[0]+pr,GH,a[2]+pr,post);const b2=P(lx-d*GD,yy,0);g.box(b2[0]-.03,0,b2[2]-.03,b2[0]+.03,GHB,b2[2]+.03,[.85,.85,.85]);}
+    const c1=P(lx,CY-PO,0),c2=P(lx,CY+PO,0);g.box(Math.min(c1[0],c2[0])-pr,GH-pr,c1[2]-pr,Math.max(c1[0],c2[0])+pr,GH+pr,c1[2]+pr,post);}
   // carteles, gradas con hinchada, árboles y edificios
   const board=hexc('#285a52'),board2=hexc('#2f6a60');
   const side=(along0,along1,off,dirOut,isLong)=>{ // off = distancia desde la línea; dirOut hacia afuera
@@ -549,9 +549,9 @@ function buildWorld(){
   // redes (transparentes, se dibujan al final)
   const n=new Geo(),nc=[1,1,1];
   for(const sd of [0,1]){const lx=sd?FW:0,d=sd?-1:1;
-    n.quad(P(lx-d*2,CY-PO,0),P(lx-d*2,CY+PO,0),P(lx-d*2,CY+PO,2.2),P(lx-d*2,CY-PO,2.2),nc);
-    n.quad(P(lx,CY-PO,2.44),P(lx,CY+PO,2.44),P(lx-d*2,CY+PO,2.2),P(lx-d*2,CY-PO,2.2),nc);
-    for(const yy of [CY-PO,CY+PO])n.quad(P(lx,yy,0),P(lx-d*2,yy,0),P(lx-d*2,yy,2.2),P(lx,yy,2.44),nc);}
+    n.quad(P(lx-d*GD,CY-PO,0),P(lx-d*GD,CY+PO,0),P(lx-d*GD,CY+PO,GHB),P(lx-d*GD,CY-PO,GHB),nc);
+    n.quad(P(lx,CY-PO,GH),P(lx,CY+PO,GH),P(lx-d*GD,CY+PO,GHB),P(lx-d*GD,CY-PO,GHB),nc);
+    for(const yy of [CY-PO,CY+PO])n.quad(P(lx,yy,0),P(lx-d*GD,yy,0),P(lx-d*GD,yy,GHB),P(lx,yy,GH),nc);}
   MESH.net=mk(n);
 }
 // ---- cámara ----
@@ -567,7 +567,7 @@ function camUpdate(dt,follow){
   const half=Wv/2-4;
   if(side){tx=clamp(bv.x+fwd*3,half-6,FW-half+6);ty=clamp(bv.y+(CY-bv.y)*0.3,6,FH-6);}   // de costado: el ancho visible va a lo largo de la cancha
   else{ty=half*2>=FH?CY:clamp(ty,half-2,FH-half+2);tx=clamp(tx,fwd>0?6:14,fwd>0?FW-14:FW-6);}
-  if(!CAM.init){CAM.tx=tx;CAM.ty=ty;CAM.init=true;}
+  if(!CAM.init){CAM.tx=tx;CAM.ty=ty;CAM.init=true;CAM.free=false;}
   if(follow){const k=Math.min(1,dt*2.6);CAM.tx+=(tx-CAM.tx)*k;CAM.ty+=(ty-CAM.ty)*k;}
   const T=[WX(CAM.ty),0,WZ(CAM.tx)],fw=side?[-fwd,0,0]:[0,0,-fwd];   // atrás: mira hacia el arco rival; costado: desde la tribuna, atacando a la derecha
   const eye=[T[0]-fw[0]*D*Math.cos(pitch),D*Math.sin(pitch),T[2]-fw[2]*D*Math.cos(pitch)];
@@ -677,7 +677,7 @@ function ghostBall(dt){
   const g=BV.ghost;if(!g)return false;
   let s=Math.hypot(g.vx,g.vy);if(s>0){const ns=Math.max(0,s-AB*dt*(g.hit?5:1.2));g.vx*=ns/s;g.vy*=ns/s;s=ns;}
   g.x+=g.vx*dt;g.y+=g.vy*dt;
-  if(g.goal){const sd=g.x<FW/2?0:1,back=sd?FW+2-BR:-2+BR;
+  if(g.goal){const sd=g.x<FW/2?0:1,back=sd?FW+GD-BR:-GD+BR;
     if(sd?g.x>FW:g.x<0)g.y=clamp(g.y,CY-PO+BR+.05,CY+PO-BR-.05);
     if(sd?g.x>back:g.x<back){g.x=back;if(!g.hit){g.hit=true;NETB[sd]={y:g.y,h:BR+.15,a:Math.min(.95,.25+s*.035),t:0};snd(180,90,0.12,0.25,'triangle');}g.vx*=-.12;g.vy*=.4;}}
   else{if(g.y<-4.6+BR){g.y=-4.6+BR;g.vy*=-.3;}if(g.y>FH+4.6-BR){g.y=FH+4.6-BR;g.vy*=-.3;}if(g.x<-5.6+BR){g.x=-5.6+BR;g.vx*=-.3;}if(g.x>FW+5.6-BR){g.x=FW+5.6-BR;g.vx*=-.3;}}
@@ -690,15 +690,15 @@ function drawNets(dt){
     if(nb){nb.t+=dt;A=nb.a*Math.exp(-nb.t*2.2)*Math.cos(nb.t*7.5);if(nb.t>3)NETB[sd]=null;}
     const lx=sd?FW:0,d=sd?-1:1;   // d: hacia la cancha
     // punto de la red: u a lo ancho (y), w de 0 (línea) a 1 (fondo), h altura; se infla hacia afuera cerca del golpe
-    const pt=(y,w,h)=>{let x=lx-d*2*w,hh=h;
+    const pt=(y,w,h)=>{let x=lx-d*GD*w,hh=h;
       if(nb&&A){const k=Math.exp(-((y-nb.y)**2)/1.6-((hh-nb.h)**2)/1.1)*w*w;x+=-d*A*k;hh+=A*k*.15;}
       return P(x,y,hh);};
-    const top=w=>2.44-0.24*w;
+    const top=w=>GH-(GH-GHB)*w;
     const add=(a,c)=>{v.push(a[0],a[1],a[2],0,1,0,1,1,1,c[0],c[1],c[2],0,1,0,1,1,1);};
-    const NY=16,NH=9,ND=4;
+    const NY=18,NH=14,ND=5;
     // fondo: líneas verticales y horizontales
-    for(let k=0;k<=NY;k++){const y=CY-PO+2*PO*k/NY;for(let j=0;j<NH;j++)add(pt(y,1,2.2*j/NH),pt(y,1,2.2*(j+1)/NH));}
-    for(let j=0;j<=NH;j++){const h=2.2*j/NH;for(let k=0;k<NY;k++)add(pt(CY-PO+2*PO*k/NY,1,h),pt(CY-PO+2*PO*(k+1)/NY,1,h));}
+    for(let k=0;k<=NY;k++){const y=CY-PO+2*PO*k/NY;for(let j=0;j<NH;j++)add(pt(y,1,GHB*j/NH),pt(y,1,GHB*(j+1)/NH));}
+    for(let j=0;j<=NH;j++){const h=GHB*j/NH;for(let k=0;k<NY;k++)add(pt(CY-PO+2*PO*k/NY,1,h),pt(CY-PO+2*PO*(k+1)/NY,1,h));}
     // techo
     for(let k=0;k<=NY;k++){const y=CY-PO+2*PO*k/NY;for(let j=0;j<ND;j++)add(pt(y,j/ND,top(j/ND)),pt(y,(j+1)/ND,top((j+1)/ND)));}
     for(let j=0;j<=ND;j++)for(let k=0;k<NY;k++)add(pt(CY-PO+2*PO*k/NY,j/ND,top(j/ND)),pt(CY-PO+2*PO*(k+1)/NY,j/ND,top(j/ND)));
@@ -754,7 +754,7 @@ function render3D(now,dt){
     const nx=BV.wx,nz=BV.wz;if(BV.px!==undefined){const dx=nx-BV.px,dz=nz-BV.pz,d=Math.hypot(dx,dz);if(d>1e-4&&d<3){const ax=dz/d,az=-dx/d,an=d/BR,c=Math.cos(an),s=Math.sin(an),C=1-c;
       const R=new Float32Array([c+ax*ax*C,az*s,az*ax*C,0, -az*s,c,ax*s,0, ax*az*C,-ax*s,c+az*az*C,0, 0,0,0,1]);BV.rot=M4.mul(R,BV.rot);}}
     BV.px=nx;BV.pz=nz;BV.x=FW/2-nz;BV.y=nx+CY;}
-  const follow=!(drag||hold||tap);camUpdate(dt,follow);
+  const follow=!(drag||hold||tap||pan||CAM.free);camUpdate(dt,follow);
   gl.viewport(0,0,g3.width,g3.height);gl.clearColor(.80,.85,.87,1);gl.clearStencil(0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);gl.useProgram(PRG);for(const a in AL)gl.enableVertexAttribArray(AL[a]);
   gl.uniformMatrix4fv(UL.uVP,false,CAM.VP);gl.uniform3fv(UL.uEye,CAM.eye);const lv=[-.42,1,.32],ll=Math.hypot(...lv);gl.uniform3fv(UL.uL,lv.map(x=>x/ll));gl.uniform3fv(UL.uFog,[.80,.85,.87]);
@@ -896,7 +896,7 @@ function toggleFS(){const d=document,el=d.documentElement;
     const rq=el.requestFullscreen||el.webkitRequestFullscreen;
     if(!rq){banner(/iPhone|iPod/.test(navigator.userAgent)?'En iPhone: Compartir → Agregar a inicio':'Tu navegador no tiene pantalla completa',2600);return;}
     const pr=rq.call(el,{navigationUI:'hide'});if(pr&&pr.catch)pr.catch(()=>banner('No se pudo poner pantalla completa',1800));}catch(e){banner('No se pudo poner pantalla completa',1800);}}
-function buttons(){return[{id:'fs',t:isFS()?'✕ ⛶':'⛶',x:W-124,y:TOP+2,w:36,h:28,small:1},{id:'cam',t:['🎥 cerca','🎥 medio','🎥 lejos','🗺 mapa'][CFG.cam],x:W-84,y:TOP+2,w:74,h:28,small:1},{id:'on',t:G.mode==='online'?'👥 '+joined().length:'👥 ONLINE',x:W-104,y:10,w:94,h:34,on:G.mode==='online'},{id:'re',t:'☰',x:W-148,y:10,w:38,h:34},{id:'cf',t:'⚙',x:W-192,y:10,w:38,h:34}];}
+function buttons(){return[...(CAM.free&&is3D()?[{id:'ctr',t:'⌖ pelota',x:W-196,y:TOP+2,w:66,h:28,small:1}]:[]),{id:'fs',t:isFS()?'✕ ⛶':'⛶',x:W-124,y:TOP+2,w:36,h:28,small:1},{id:'cam',t:['🎥 cerca','🎥 medio','🎥 lejos','🗺 mapa'][CFG.cam],x:W-84,y:TOP+2,w:74,h:28,small:1},{id:'on',t:G.mode==='online'?'👥 '+joined().length:'👥 ONLINE',x:W-104,y:10,w:94,h:34,on:G.mode==='online'},{id:'re',t:'☰',x:W-148,y:10,w:38,h:34},{id:'cf',t:'⚙',x:W-192,y:10,w:38,h:34}];}
 /* =================== TOQUES =================== */
 let drag=null,hold=null,passMode=false,tap=null;
 function holdPower(now){return clamp(((now||performance.now())-hold.at)/(CFG.ch*1000),0,1);}
@@ -904,15 +904,15 @@ function pick(sx,sy){let best=-1,bd=1e9;const D3=is3D();for(let i=0;i<10;i++){if
   if(D3){const a=toS(q.x,q.y,0),c=toS(q.x,q.y,2.1*MS),m=PXM(q.x,q.y);   // tocar en cualquier parte del cuerpo
     const ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,t=clamp(((sx-a.x)*ux+(sy-a.y)*uy)/l2,0,1),d=Math.hypot(sx-a.x-ux*t,sy-a.y-uy*t);if(d<Math.max(24,m*1.1)&&d<bd){bd=d;best=i;}}
   else{const s=toS(q.x,q.y),d=Math.hypot(s.x-sx,s.y-sy);if(d<Math.max(26,PR()*2)&&d<bd){bd=d;best=i;}}}return best;}
-const PTR=new Map();let pinch=null;
+const PTR=new Map();let pinch=null,pan=null;
 cv.addEventListener('pointerdown',e=>{
   e.preventDefault();const x=e.clientX,y=e.clientY;try{cv.setPointerCapture(e.pointerId);}catch(_){}
   PTR.set(e.pointerId,{x,y});
   if(PTR.size>=2){   // segundo dedo: zoom; se cancela lo que hacía el primero
-    if(is3D()&&!pinch){const [a,c]=[...PTR.values()];pinch={d0:Math.hypot(a.x-c.x,a.y-c.y)||1,w0:CFG.wv||CAMW[clamp(CFG.cam|0,0,2)]};drag=null;hold=null;tap=null;}
+    if(is3D()&&!pinch){const [a,c]=[...PTR.values()];pinch={d0:Math.hypot(a.x-c.x,a.y-c.y)||1,w0:CFG.wv||CAMW[clamp(CFG.cam|0,0,2)]};drag=null;hold=null;tap=null;pan=null;}
     return;}
   if(pinch)return;
-  for(const bt of buttons())if(x>bt.x&&x<bt.x+bt.w&&y>bt.y&&y<bt.y+bt.h){if(bt.id==='on')panel();else if(bt.id==='cf')settings();else if(bt.id==='re')menu();else if(bt.id==='fs')toggleFS();else if(bt.id==='cam'){CFG.cam=gl?(CFG.cam+1)%4:3;CFG.wv=0;saveCfg();show3D();CAM.init=false;banner(['Cámara cerca','Cámara media','Cámara lejos','Vista mapa'][CFG.cam],800);}return;}
+  for(const bt of buttons())if(x>bt.x&&x<bt.x+bt.w&&y>bt.y&&y<bt.y+bt.h){if(bt.id==='on')panel();else if(bt.id==='cf')settings();else if(bt.id==='re')menu();else if(bt.id==='fs')toggleFS();else if(bt.id==='ctr')CAM.free=false;else if(bt.id==='cam'){CFG.cam=gl?(CFG.cam+1)%4:3;CFG.wv=0;saveCfg();show3D();CAM.init=false;banner(['Cámara cerca','Cámara media','Cámara lejos','Vista mapa'][CFG.cam],800);}return;}
   if(G.mode==='online'&&!NET.host&&!NET.synced)return;
   const S=G.S,b=S.b,i=pick(x,y);
   if(S.ph==='end')return;
@@ -921,7 +921,7 @@ cv.addEventListener('pointerdown',e=>{
     if(i!==pe.k&&!passMode)return;}
   if(passMode){if(i>=0&&i===b.o){tap={id:e.pointerId,i,x,y,at:performance.now(),cancel:true};return;}
     hold={id:e.pointerId,at:performance.now(),f:toF(x,y)};return;}
-  if(i<0)return;
+  if(i<0){if(is3D())pan={id:e.pointerId,x,y,moved:false};return;}   // en el pasto: mover la cámara
   if(b.o===i){tap={id:e.pointerId,i,x,y,at:performance.now()};return;}
   drag={id:e.pointerId,i,pts:[[S.p[i].x,S.p[i].y]]};
 });
@@ -929,12 +929,15 @@ cv.addEventListener('pointermove',e=>{
   const x=e.clientX,y=e.clientY;
   if(PTR.has(e.pointerId))PTR.set(e.pointerId,{x,y});
   if(pinch){if(PTR.size>=2){const [a,c]=[...PTR.values()];CFG.wv=clamp(pinch.w0*pinch.d0/(Math.hypot(a.x-c.x,a.y-c.y)||1),16,90);}return;}
+  if(pan&&e.pointerId===pan.id){if(!pan.moved&&Math.hypot(x-pan.x,y-pan.y)<7)return;pan.moved=true;
+    const a=toF3(pan.x,pan.y),c=toF3(x,y);CAM.tx=clamp(CAM.tx+a.x-c.x,-4,FW+4);CAM.ty=clamp(CAM.ty+a.y-c.y,-4,FH+4);CAM.free=true;camUpdate(0,false);pan.x=x;pan.y=y;return;}
   if(drag&&e.pointerId===drag.id){const f=toF(x,y),l=drag.pts[drag.pts.length-1];if(Math.hypot(f.x-l[0],f.y-l[1])>1.2)drag.pts.push([Math.round(f.x*10)/10,Math.round(f.y*10)/10]);}
   if(hold&&e.pointerId===hold.id)hold.f=toF(x,y);
 });
 function up(e){
   PTR.delete(e.pointerId);
   if(pinch){if(PTR.size===0){pinch=null;saveCfg();}return;}
+  if(pan&&e.pointerId===pan.id){pan=null;return;}
   if(drag&&e.pointerId===drag.id){const d=drag;drag=null;if(d.pts.length>1&&e.type==='pointerup')act({k:'m',i:d.i,path:d.pts.slice(1,61)});
     else if(e.type==='pointerup'&&G.S.p[d.i].path){act({k:'s',i:d.i});snd(400,300,0.05,0.05);}}
   if(tap&&e.pointerId===tap.id){const t=tap;tap=null;if(Math.hypot(e.clientX-t.x,e.clientY-t.y)<14){passMode=t.cancel?false:true;if(passMode)snd(600,800,0.05,0.06);}}
@@ -1061,7 +1064,7 @@ function frame(now){
   const S=G.S,sc=S.sc.join('-');
   if(sc!==G.lastSc){const [a,c]=G.lastSc.split('-').map(Number);if(S.sc[0]>a||S.sc[1]>c){const t=S.sc[0]>a?0:1;banner(t===G.myTeam?'¡GOOOL!':'Gol rival',1900,true);snd(500,900,0.15,0.6,'sawtooth');}G.lastSc=sc;}
   if(S.rsN!==G.lastRsN){G.lastRsN=S.rsN;if(S.rs&&S.rs.type!=='goal'&&S.rs.type!=='half'){banner(S.rs.why==='6s'?'¡10 segundos! Lateral '+(S.rs.team===G.myTeam?'tuyo':'del rival'):{lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[S.rs.type],1500);snd(2900,2700,0.05,0.2,'square');}}
-  if(S.msgN!==G.lastMsgN){G.lastMsgN=S.msgN;if(S.msg){const big=/GOL|Final|Penales|Revancha/.test(S.msg);banner(S.msg,1900,big);if(S.msg==='¡GOL!')snd(500,900,0.15,0.6,'sawtooth');else snd(2900,2400,0.06,0.35,'square');}}
+  if(S.msgN!==G.lastMsgN){G.lastMsgN=S.msgN;if(/GOL|tiempo|Alargue|Penales|Revancha/.test(S.msg||''))CAM.free=false;if(S.msg){const big=/GOL|Final|Penales|Revancha/.test(S.msg);banner(S.msg,1900,big);if(S.msg==='¡GOL!')snd(500,900,0.15,0.6,'sawtooth');else snd(2900,2400,0.06,0.35,'square');}}
   if(S.ph==='pen'){const k=S.pen.n[0]+S.pen.n[1];if(G.diveFor!==k){G.diveFor=k;G.myDive=null;}}
   if(S.ph==='end'&&!G.endShown){G.endShown=true;passMode=false;hold=null;drag=null;setTimeout(()=>{if(G.S.ph==='end')endPanel();},1200);}
   if(S.ph!=='end'&&G.endShown){G.endShown=false;if(G.panelKind==='end')pel.style.display='none';}
