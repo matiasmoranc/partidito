@@ -31,7 +31,8 @@ canvas{display:block;touch-action:none;position:fixed;left:0;top:0}
 const FW=105,FH=68,CY=34,PO=4.21,DT=1/60,VP=6.8,VK=5.6,AB=2.6,VMIN=4.6,VMAX=27.6,RST=1.9,RKP=2.4,BLOCK=5,VDIVE=8.5;
 const HALF=Math.round((window.__HALF||300)*60),ET=Math.round((window.__ET||120)*60),HOLD=600,MATE=1.5,KWS=14,KWL=24,VLONG=17;   // preparación del pase: corto 0,23 s, largo (≥17 m/s) 0,4 s
 //   // 5 min por tiempo, 2 min de alargue, 10 s para pasar; compañeros a la marca + 1,5 m
-let CFG={bl:5,pm:1,ch:1.1,lvl:1,cam:1,ang:1,wv:0};try{const c=JSON.parse(localStorage.getItem('pt_cfg')||'{}');if(c.bl)CFG.bl=c.bl;if(c.pm)CFG.pm=c.pm;if(c.ch)CFG.ch=c.ch;if(c.lvl>=0&&c.lvl<=2)CFG.lvl=c.lvl|0;if(c.cam>=0&&c.cam<=3)CFG.cam=c.cam|0;if(c.ang===0||c.ang===1)CFG.ang=c.ang;if(c.wv>=16&&c.wv<=90)CFG.wv=+c.wv;}catch(e){}
+const WVMAX=120;   // lo más lejos que deja el pellizco (ancho visible en metros)
+let CFG={bl:5,pm:1,ch:1.1,lvl:1,cam:1,ang:1,wv:0};try{const c=JSON.parse(localStorage.getItem('pt_cfg')||'{}');if(c.bl)CFG.bl=c.bl;if(c.pm)CFG.pm=c.pm;if(c.ch)CFG.ch=c.ch;if(c.lvl>=0&&c.lvl<=2)CFG.lvl=c.lvl|0;if(c.cam>=0&&c.cam<=3)CFG.cam=c.cam|0;if(c.ang===0||c.ang===1)CFG.ang=c.ang;if(c.wv>=16&&c.wv<=WVMAX)CFG.wv=+c.wv;}catch(e){}
 const saveCfg=()=>{try{localStorage.setItem('pt_cfg',JSON.stringify(CFG));}catch(e){}};
 const sq=Math.sqrt,clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const team=i=>i<5?0:1,isK=i=>i%5===0;
@@ -467,14 +468,14 @@ Geo.prototype.sphere=function(r,sub,col,cx,cy,cz,keep,sy){cx=cx||0;cy=cy||0;cz=c
 let PRG=null,AL={},UL={};const MESH={};
 function mk(geo){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(geo.v),gl.STATIC_DRAW);return{b,n:geo.v.length/9};}
 function initGL(){
-  const vs=`attribute vec3 aP;attribute vec3 aN;attribute vec3 aC;uniform mat4 uM,uVP;uniform vec3 uCol,uL,uEye;uniform float uSh;varying vec3 vC;varying float vF;
+  const vs=`attribute vec3 aP;attribute vec3 aN;attribute vec3 aC;uniform mat4 uM,uVP;uniform vec3 uCol,uL,uEye;uniform float uSh,uFs;varying vec3 vC;varying float vF;
     void main(){vec4 w=uM*vec4(aP,1.);gl_Position=uVP*w;vec3 n=normalize((uM*vec4(aN,0.)).xyz);float d=max(dot(n,uL),0.);vec3 c=aC*uCol;
-      vC=uSh>.5?vec3(.05,.12,.07):c*(.55+.55*d)+.05*n.y;vF=clamp((length(w.xyz-uEye)-110.)/220.,0.,.65);}`;
+      vC=uSh>.5?vec3(.05,.12,.07):c*(.55+.55*d)+.05*n.y;vF=clamp((length(w.xyz-uEye)-uFs)/220.,0.,.65);}`;
   const fs=`precision mediump float;varying vec3 vC;varying float vF;uniform vec3 uFog;uniform float uA;void main(){gl_FragColor=vec4(mix(vC,uFog,vF),uA);}`;
   const sh=(t,src)=>{const o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;};
   PRG=gl.createProgram();gl.attachShader(PRG,sh(gl.VERTEX_SHADER,vs));gl.attachShader(PRG,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(PRG);gl.useProgram(PRG);
   for(const a of ['aP','aN','aC'])AL[a]=gl.getAttribLocation(PRG,a);
-  for(const u of ['uM','uVP','uCol','uL','uEye','uSh','uFog','uA'])UL[u]=gl.getUniformLocation(PRG,u);
+  for(const u of ['uM','uVP','uCol','uL','uEye','uSh','uFog','uA','uFs'])UL[u]=gl.getUniformLocation(PRG,u);
   const W1=[1,1,1];
   // partes del cuerpo (blancas: el color lo pone cada equipo)
   let g;
@@ -535,7 +536,7 @@ function buildWorld(){
   };
   side(-2,FW+2,-5,-1,true);side(-2,FW+2,FH+5,1,true);side(-4,FH+4,-6,-1,false);side(-4,FH+4,FW+6,1,false);
   // piso de afuera
-  g.quad(P(-80,-80,-.05),P(FW+80,-80,-.05),P(FW+80,FH+80,-.05),P(-80,FH+80,-.05),hexc('#5b7a5f'));
+  g.quad(P(-400,-400,-.05),P(FW+400,-400,-.05),P(FW+400,FH+400,-.05),P(-400,FH+400,-.05),hexc('#5b7a5f'));
   // árboles (bolas low-poly) y edificios
   const tree=(fx,fy)=>{const c=P(fx,fy,0),h=5+R()*3;g.prism(.25,.32,h*.6,0,5,hexc('#6b5a45'),1,1,c[0],c[2]);
     const tones=['#5f8a67','#6e9a74','#56805e','#7aa47e'];for(let k=0;k<4;k++){const r=1.8+R()*1.6;g.sphere(r,1,hexc(tones[R()*4|0]),c[0]+(R()-.5)*2.5,h+(R()-.2)*2,c[2]+(R()-.5)*2.5);}};
@@ -565,7 +566,7 @@ function camUpdate(dt,follow){
   const D=(Wv/2)/CAM.tanH,side=CFG.ang===1;
   let ty=bv.y+(CY-bv.y)*0.2,tx=bv.x+fwd*lerp(4,10,zt);
   const half=Wv/2-4;
-  if(side){tx=clamp(bv.x+fwd*3,half-6,FW-half+6);ty=clamp(bv.y+(CY-bv.y)*0.3,6,FH-6);}   // de costado: el ancho visible va a lo largo de la cancha
+  if(side){tx=half-6>FW-half+6?FW/2:clamp(bv.x+fwd*3,half-6,FW-half+6);ty=clamp(bv.y+(CY-bv.y)*0.3,6,FH-6);}   // de costado: el ancho visible va a lo largo de la cancha
   else{ty=half*2>=FH?CY:clamp(ty,half-2,FH-half+2);tx=clamp(tx,fwd>0?6:14,fwd>0?FW-14:FW-6);}
   if(!CAM.init){CAM.tx=tx;CAM.ty=ty;CAM.init=true;CAM.free=false;}
   if(follow){const k=Math.min(1,dt*2.6);CAM.tx+=(tx-CAM.tx)*k;CAM.ty+=(ty-CAM.ty)*k;}
@@ -578,7 +579,7 @@ function camUpdate(dt,follow){
   const V=new Float32Array(16);V[0]=r[0];V[4]=r[1];V[8]=r[2];V[12]=-(r[0]*eye[0]+r[1]*eye[1]+r[2]*eye[2]);
   V[1]=u[0];V[5]=u[1];V[9]=u[2];V[13]=-(u[0]*eye[0]+u[1]*eye[1]+u[2]*eye[2]);
   V[2]=-f[0];V[6]=-f[1];V[10]=-f[2];V[14]=f[0]*eye[0]+f[1]*eye[1]+f[2]*eye[2];V[15]=1;
-  const n=.5,fa=700,Pm=new Float32Array(16);Pm[0]=1/CAM.tanH;Pm[5]=1/CAM.tanV;Pm[10]=(fa+n)/(n-fa);Pm[11]=-1;Pm[14]=2*fa*n/(n-fa);
+  const n=.5,fa=1400,Pm=new Float32Array(16);Pm[0]=1/CAM.tanH;Pm[5]=1/CAM.tanV;Pm[10]=(fa+n)/(n-fa);Pm[11]=-1;Pm[14]=2*fa*n/(n-fa);
   CAM.VP=M4.mul(Pm,V);
 }
 function toS3(fx,fy,h){const m=CAM.VP,x=WX(fy),y=h||0,z=WZ(fx);const cx=m[0]*x+m[4]*y+m[8]*z+m[12],cy=m[1]*x+m[5]*y+m[9]*z+m[13],cw=m[3]*x+m[7]*y+m[11]*z+m[15];
@@ -757,7 +758,7 @@ function render3D(now,dt){
   const follow=!(drag||hold||tap||pan||CAM.free);camUpdate(dt,follow);
   gl.viewport(0,0,g3.width,g3.height);gl.clearColor(.80,.85,.87,1);gl.clearStencil(0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);gl.useProgram(PRG);for(const a in AL)gl.enableVertexAttribArray(AL[a]);
-  gl.uniformMatrix4fv(UL.uVP,false,CAM.VP);gl.uniform3fv(UL.uEye,CAM.eye);const lv=[-.42,1,.32],ll=Math.hypot(...lv);gl.uniform3fv(UL.uL,lv.map(x=>x/ll));gl.uniform3fv(UL.uFog,[.80,.85,.87]);
+  gl.uniformMatrix4fv(UL.uVP,false,CAM.VP);gl.uniform3fv(UL.uEye,CAM.eye);gl.uniform1f(UL.uFs,Math.max(110,Math.hypot(...CAM.eye.map((v,k)=>v-[WX(CAM.ty),0,WZ(CAM.tx)][k]))+40));const lv=[-.42,1,.32],ll=Math.hypot(...lv);gl.uniform3fv(UL.uL,lv.map(x=>x/ll));gl.uniform3fv(UL.uFog,[.80,.85,.87]);
   gl.uniform1f(UL.uA,1);gl.uniform1f(UL.uSh,0);gl.disable(gl.BLEND);
   PASS='n';MT=M4.id();gl.uniform3fv(UL.uCol,[1,1,1]);part(MESH.world,[1,1,1]);
   // sombras (cada píxel se oscurece una sola vez)
@@ -928,7 +929,7 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('pointermove',e=>{
   const x=e.clientX,y=e.clientY;
   if(PTR.has(e.pointerId))PTR.set(e.pointerId,{x,y});
-  if(pinch){if(PTR.size>=2){const [a,c]=[...PTR.values()];CFG.wv=clamp(pinch.w0*pinch.d0/(Math.hypot(a.x-c.x,a.y-c.y)||1),16,90);}return;}
+  if(pinch){if(PTR.size>=2){const [a,c]=[...PTR.values()];CFG.wv=clamp(pinch.w0*pinch.d0/(Math.hypot(a.x-c.x,a.y-c.y)||1),16,WVMAX);}return;}
   if(pan&&e.pointerId===pan.id){if(!pan.moved&&Math.hypot(x-pan.x,y-pan.y)<7)return;pan.moved=true;
     const a=toF3(pan.x,pan.y),c=toF3(x,y);CAM.tx=clamp(CAM.tx+a.x-c.x,-4,FW+4);CAM.ty=clamp(CAM.ty+a.y-c.y,-4,FH+4);CAM.free=true;camUpdate(0,false);pan.x=x;pan.y=y;return;}
   if(drag&&e.pointerId===drag.id){const f=toF(x,y),l=drag.pts[drag.pts.length-1];if(Math.hypot(f.x-l[0],f.y-l[1])>1.2)drag.pts.push([Math.round(f.x*10)/10,Math.round(f.y*10)/10]);}
