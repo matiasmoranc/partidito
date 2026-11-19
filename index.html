@@ -426,7 +426,7 @@ function netTick(){
 // Todo lo de acá es solo dibujo: no toca la simulación, así que puede usar trigonometría y azar.
 const g3=document.getElementById('g');let gl=null;
 try{gl=g3.getContext('webgl',{antialias:true,stencil:true,alpha:false,powerPreference:'high-performance'})||g3.getContext('experimental-webgl',{stencil:true});}catch(e){gl=null;}
-const MS=2.0,BR=0.30,D2R=Math.PI/180,GH=4.6,GHB=4.2,GD=2.8;   // alto del travesaño, alto atrás y fondo del arco (más alto que el arquero)   // escala de los jugadores, radio (visual) de la pelota
+const MS=2.0,BR=0.36,D2R=Math.PI/180,GH=4.6,GHB=4.2,GD=2.8;   // alto del travesaño, alto atrás y fondo del arco (más alto que el arquero)   // escala de los jugadores, radio (visual) de la pelota
 const CAMW=[28,40,62];                  // ancho visible por zoom: cerca, medio, lejos (3 = mapa 2D)
 const is3D=()=>!!gl&&CFG.cam!==3;
 // ---- matrices 4x4 (column-major) ----
