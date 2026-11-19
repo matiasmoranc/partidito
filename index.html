@@ -31,8 +31,9 @@ canvas{display:block;touch-action:none;position:fixed;left:0;top:0}
 const FW=105,FH=68,CY=34,PO=4.21,DT=1/60,VP=6.8,VK=5.6,AB=2.6,VMIN=4.6,VMAX=27.6,RST=1.9,RKP=2.4,BLOCK=5,VDIVE=8.5;
 const HALF=Math.round((window.__HALF||300)*60),ET=Math.round((window.__ET||120)*60),HOLD=600,MATE=1.5,KWS=14,KWL=24,VLONG=17;   // preparación del pase: corto 0,23 s, largo (≥17 m/s) 0,4 s
 //   // 5 min por tiempo, 2 min de alargue, 10 s para pasar; compañeros a la marca + 1,5 m
-const WVMAX=120;   // lo más lejos que deja el pellizco (ancho visible en metros)
-let CFG={bl:5,pm:1,ch:1.1,lvl:1,cam:1,ang:1,wv:0};try{const c=JSON.parse(localStorage.getItem('pt_cfg')||'{}');if(c.bl)CFG.bl=c.bl;if(c.pm)CFG.pm=c.pm;if(c.ch)CFG.ch=c.ch;if(c.lvl>=0&&c.lvl<=2)CFG.lvl=c.lvl|0;if(c.cam>=0&&c.cam<=3)CFG.cam=c.cam|0;if(c.ang===0||c.ang===1)CFG.ang=c.ang;if(c.wv>=16&&c.wv<=WVMAX)CFG.wv=+c.wv;}catch(e){}
+const WVMAX=120;   // lo más lejos que deja el pellizco (ancho visible en metros) en el celular
+const wvMax=()=>Math.min(260,WVMAX*Math.max(1,(innerWidth/innerHeight)*1.2));   // en pantallas anchas (PC) se puede alejar más
+let CFG={bl:5,pm:1,ch:1.1,lvl:1,cam:1,ang:1,wv:0};try{const c=JSON.parse(localStorage.getItem('pt_cfg')||'{}');if(c.bl)CFG.bl=c.bl;if(c.pm)CFG.pm=c.pm;if(c.ch)CFG.ch=c.ch;if(c.lvl>=0&&c.lvl<=2)CFG.lvl=c.lvl|0;if(c.cam>=0&&c.cam<=3)CFG.cam=c.cam|0;if(c.ang===0||c.ang===1)CFG.ang=c.ang;if(c.wv>=16&&c.wv<=260)CFG.wv=+c.wv;}catch(e){}
 const saveCfg=()=>{try{localStorage.setItem('pt_cfg',JSON.stringify(CFG));}catch(e){}};
 const sq=Math.sqrt,clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const team=i=>i<5?0:1,isK=i=>i%5===0;
@@ -425,7 +426,7 @@ function netTick(){
 // Todo lo de acá es solo dibujo: no toca la simulación, así que puede usar trigonometría y azar.
 const g3=document.getElementById('g');let gl=null;
 try{gl=g3.getContext('webgl',{antialias:true,stencil:true,alpha:false,powerPreference:'high-performance'})||g3.getContext('experimental-webgl',{stencil:true});}catch(e){gl=null;}
-const MS=2.0,BR=0.25,D2R=Math.PI/180,GH=4.6,GHB=4.2,GD=2.8;   // alto del travesaño, alto atrás y fondo del arco (más alto que el arquero)   // escala de los jugadores, radio (visual) de la pelota
+const MS=2.0,BR=0.30,D2R=Math.PI/180,GH=4.6,GHB=4.2,GD=2.8;   // alto del travesaño, alto atrás y fondo del arco (más alto que el arquero)   // escala de los jugadores, radio (visual) de la pelota
 const CAMW=[28,40,62];                  // ancho visible por zoom: cerca, medio, lejos (3 = mapa 2D)
 const is3D=()=>!!gl&&CFG.cam!==3;
 // ---- matrices 4x4 (column-major) ----
@@ -929,7 +930,7 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('pointermove',e=>{
   const x=e.clientX,y=e.clientY;
   if(PTR.has(e.pointerId))PTR.set(e.pointerId,{x,y});
-  if(pinch){if(PTR.size>=2){const [a,c]=[...PTR.values()];CFG.wv=clamp(pinch.w0*pinch.d0/(Math.hypot(a.x-c.x,a.y-c.y)||1),16,WVMAX);}return;}
+  if(pinch){if(PTR.size>=2){const [a,c]=[...PTR.values()];CFG.wv=clamp(pinch.w0*pinch.d0/(Math.hypot(a.x-c.x,a.y-c.y)||1),16,wvMax());}return;}
   if(pan&&e.pointerId===pan.id){if(!pan.moved&&Math.hypot(x-pan.x,y-pan.y)<7)return;pan.moved=true;
     const a=toF3(pan.x,pan.y),c=toF3(x,y);CAM.tx=clamp(CAM.tx+a.x-c.x,-4,FW+4);CAM.ty=clamp(CAM.ty+a.y-c.y,-4,FH+4);CAM.free=true;camUpdate(0,false);pan.x=x;pan.y=y;return;}
   if(drag&&e.pointerId===drag.id){const f=toF(x,y),l=drag.pts[drag.pts.length-1];if(Math.hypot(f.x-l[0],f.y-l[1])>1.2)drag.pts.push([Math.round(f.x*10)/10,Math.round(f.y*10)/10]);}
@@ -947,6 +948,10 @@ function up(e){
 }
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 cv.addEventListener('contextmenu',e=>e.preventDefault());
+// en la PC: ruedita del mouse (o el pellizco del touchpad) y las teclas + / - para el zoom
+const zoomBy=f=>{if(!is3D())return;CFG.wv=clamp((CFG.wv||CAMW[clamp(CFG.cam|0,0,2)])*f,16,wvMax());clearTimeout(zoomBy.t);zoomBy.t=setTimeout(saveCfg,400);};
+cv.addEventListener('wheel',e=>{e.preventDefault();zoomBy(Math.exp(clamp(e.deltaY,-200,200)*(e.ctrlKey?0.01:0.0015)));},{passive:false});
+addEventListener('keydown',e=>{if(e.target&&e.target.tagName==='INPUT')return;if(e.key==='+'||e.key==='=')zoomBy(1/1.15);else if(e.key==='-'||e.key==='_')zoomBy(1.15);});
 document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
 /* =================== PANEL ONLINE =================== */
 let lobbyWait=false;
