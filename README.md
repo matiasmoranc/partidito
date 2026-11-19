@@ -5,8 +5,8 @@ Fútbol táctico 5 contra 5 para el celular, en 3D low-poly (con estadio, hincha
 **Jugar:** https://matiasmoranc.github.io/partidito/
 
 ## Cómo se juega
-- **Cámara:** el botón 🎥 cambia el zoom (cerca, medio, lejos) o pasa al mapa 2D. En ⚙ elegís la cámara de costado (como en la tele) o desde atrás.
-- **Movimientos:** los jugadores corren, preparan el pase llevando la pierna atrás (más recorrido y brazos abiertos en los pases largos), paran la pelota y la apoyan bajo la suela; el arquero la agarra con las manos y se tira en los penales.
+- **Cámara:** pellizcá con dos dedos para acercar o alejar. El botón 🎥 vuelve a los zooms fijos (cerca, medio, lejos) o pasa al mapa 2D. El botón ⛶ pone pantalla completa y tocándolo otra vez se sale (en iPhone: Compartir → Agregar a inicio). En ⚙ elegís la cámara de costado (como en la tele) o desde atrás.
+- **Movimientos:** los jugadores corren, preparan el pase llevando la pierna atrás (más recorrido y brazos abiertos en los pases largos), paran la pelota y la apoyan bajo la suela; el arquero la agarra con las manos y se tira en los penales. En los goles la pelota entra y mueve la red; si sale, sigue de largo.
 - **Mover jugadores:** arrastrá un jugador tuyo: va a recorrer exactamente la línea que dibujaste. Los jugadores no se mueven solos. Si lo tocás mientras corre, se frena ahí.
 - **La pelota se pega:** apenas toca el borde de un jugador (de cualquier equipo), queda en sus pies.
 - **Zona del que tiene la pelota:** los rivales se frenan a 5 m del que la tiene y solo pueden cortar pases. Los compañeros se frenan 1,5 m más lejos.
