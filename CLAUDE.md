@@ -11,6 +11,7 @@ El dueño escribe en español rioplatense (Uruguay); respondé y escribí los te
 - La pelota **se pega** apenas toca el borde de un jugador (`RST`, arquero en su área `RKP`).
 - El que tiene la pelota no se mueve; los rivales se frenan a `S.cfg.bl` m de él (por defecto 5) y solo pueden cortar pases. Los compañeros se frenan a `S.cfg.bl+MATE` (1,5 m más). El arquero rival no tiene esa restricción: si llega a menos de `RST` del que tiene la pelota, se la saca.
 - Ajustes (botón ⚙): distancia de marca `S.cfg.bl` (2–10 m) y potencia máxima `S.cfg.pm` (60–140 %) viajan como acción `{k:'c'}` y valen para todo el partido online; el tiempo de carga del pase `CFG.ch` es local (localStorage `pt_cfg`).
+- Preparación del pase (`b.kick`, `startKick`/`releaseKick`): la pelota sale `KWS`=14 ticks después (pase corto) o `KWL`=24 (largo, velocidad ≥ `VLONG` 17 m/s), para que se vea la patada. Durante la preparación no corre el reloj de 10 s.
 - Pase: tocar al que tiene la pelota → tocar y mantener el destino; el tiempo apretado es la potencia (llega al máximo en `CFG.ch` s, por defecto 1,1). Velocidad `VMIN`..`VMAX*S.cfg.pm`, frenado constante `AB`.
 - Saque del medio (`S.ko`): el rival no cruza la mitad hasta el primer pase del que saca.
 - Saque de arco (`S.gk`): el rival no entra al área grande hasta que saca el arquero.
@@ -32,11 +33,13 @@ El dueño escribe en español rioplatense (Uruguay); respondé y escribí los te
   - Dentro de Claude (artifact): capacidad `room` de Claude (`window.claude.use('room')`), mensajes por `presence`.
   - El primero que entra es el anfitrión: lleva el reloj (`hb`), reprograma las acciones de los clientes (`in` → `ev`) y manda una foto del estado cada 1,5 s (`snap`) para corregir diferencias.
   - Los del mismo equipo comparten los jugadores.
-- **Pantalla/toques**: `draw`, `toS`/`toF` (campo ↔ pantalla), `pointerdown/move/up`, panel online (`panel`).
+- **3D** (sección "3D (WebGL escrito a mano)"): sin librerías. `initGL`/`buildWorld` (cancha, arcos, gradas con hinchada, árboles, edificios; todo low-poly con sombreado plano), `camUpdate` (cámara que sigue a la pelota; `CFG.cam` 0 cerca/1 medio/2 lejos/3 mapa 2D, `CFG.ang` 1 costado/0 desde atrás), `animate` (poses procedurales por jugador: correr, preparación y seguimiento de pase corto/largo, control con la suela, arquero en guardia/agarra/se tira, festejo), `drawPlayer` (esqueleto con matrices; pasada 'fk' para ubicar pie y manos, 'sh' sombras planas con stencil, 'n' normal), `render3D`. Es solo dibujo: puede usar trigonometría y azar. `MS` escala de jugadores (estilo caricatura), `BR` radio visual de la pelota.
+- **Pantalla/toques**: `draw` dibuja el 3D y encima un canvas 2D con líneas, círculos sobre el pasto (`gArc`), números, barra y carteles. `toS`/`toF` (campo ↔ pantalla) proyectan con la cámara 3D o usan el mapa 2D (`toS2`/`toF2`). `pick` toca en cualquier parte del cuerpo. Sin WebGL cae al mapa 2D.
 - `window.__T` expone internos para pruebas (`G`, `act`, `advanceTo`, `aiThink`, `blocked`, `netConnect`, `netJoin`…).
 
 ## Cómo probar
-- Abrir `index.html` en un navegador con vista de celular (390 × 844).
+- Abrir `index.html` en un navegador con vista de celular (390 × 844). En Chrome sin GPU: `--use-angle=swiftshader --enable-unsafe-swiftshader`.
+- `window.__FREEZE=1` congela el reloj del partido y las animaciones pasan a avanzar al ritmo de la simulación: sirve para avanzar cuadro a cuadro con `__T.advanceTo(tick)` y sacar capturas.
 - Pruebas automáticas usadas: Playwright con Chrome; para el online, dos contextos de navegador separados y un broker MQTT local por WebSocket, con `window.__BROKERS=['ws://127.0.0.1:8899/mqtt']` inyectado antes de cargar. Se comparó el estado `G.hist.get(tick)` en los dos y tiene que ser idéntico.
 
 ## Historia
