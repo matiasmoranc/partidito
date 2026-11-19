@@ -7,7 +7,7 @@ El dueño escribe en español rioplatense (Uruguay); respondé y escribí los te
 ## Reglas del juego (pedidas por el dueño)
 - Cancha completa en vertical (105 × 68 m), vista desde arriba. Para el equipo rojo la vista se da vuelta (siempre defendés abajo).
 - 5 por equipo: índices 0–4 celeste (0 = arquero), 5–9 rojo (5 = arquero).
-- Los jugadores **no se mueven solos**: solo recorren la línea que el usuario dibuja arrastrándolos.
+- Los jugadores **no se mueven solos**: solo recorren la línea que el usuario dibuja arrastrándolos. Solo se ven los recorridos de tu equipo; los del rival no se dibujan.
 - La pelota **se pega** apenas toca el borde de un jugador (`RST`, arquero en su área `RKP`).
 - El que tiene la pelota no se mueve; los rivales se frenan a `S.cfg.bl` m de él (por defecto 5) y solo pueden cortar pases. Los compañeros se frenan a `S.cfg.bl+MATE` (1,5 m más). El arquero rival no tiene esa restricción: si llega a menos de `RST` del que tiene la pelota, se la saca.
 - Ajustes (botón ⚙): distancia de marca `S.cfg.bl` (2–10 m) y potencia máxima `S.cfg.pm` (60–140 %) viajan como acción `{k:'c'}` y valen para todo el partido online; el tiempo de carga del pase `CFG.ch` es local (localStorage `pt_cfg`).

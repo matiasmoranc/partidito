@@ -820,7 +820,7 @@ function draw(now){
   const S=G.S,b=S.b,D3=is3D();
   if(D3){ctx.clearRect(0,0,W,H);render3D(now,dt);}else{ctx.fillStyle='#0e1a12';ctx.fillRect(0,0,W,H);drawField();}
   // caminos
-  for(let i=0;i<10;i++){const q=S.p[i];if(q.path)drawPath(q.path.slice(q.pi),q,team(i)===G.myTeam?'rgba(255,255,255,.75)':'rgba(255,150,140,.45)');}
+  for(let i=0;i<10;i++){const q=S.p[i];if(q.path&&team(i)===G.myTeam)drawPath(q.path.slice(q.pi),q,'rgba(255,255,255,.75)');}   // los recorridos del rival no se ven
   if(drag&&drag.pts.length>1){const q=S.p[drag.i];drawPath(drag.pts.slice(1),q,'#ffe678');}
   if(S.ko){const a1=toS(FW/2,0),a2=toS(FW/2,FH);ctx.strokeStyle='rgba(255,230,120,.9)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(a1.x,a1.y);ctx.lineTo(a2.x,a2.y);ctx.stroke();}
   if(S.gk){const lx=S.gk.team?FW:0,d=S.gk.team?-1:1,cs=[[lx,CY-20.16],[lx+d*16.5,CY-20.16],[lx+d*16.5,CY+20.16],[lx,CY+20.16]].map(q=>toS(q[0],q[1]));ctx.fillStyle='rgba(255,230,120,.18)';ctx.beginPath();cs.forEach((q,k)=>k?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y));ctx.fill();}
