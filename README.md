@@ -21,6 +21,7 @@ Fútbol táctico 5 contra 5 para el celular, en 3D low-poly (con estadio, hincha
 - **⚙ Ajustes:** distancia de marca del rival, potencia máxima del pase y tiempo de carga del pase.
 
 ## Contra la PC u online
+- **Online con compañeros:** si en tu equipo hay más de uno, los jugadores se reparten (el arquero le toca a uno al azar). Los tuyos dicen *VOS*; los de tu compañero, *J1*, *J2*… El rival no ve esas marcas.
 - Al abrir aparece el menú (☰): elegí el nivel de la PC (fácil, medio o difícil), *Jugar contra la PC* o *Jugar online*. La primera vez hay un tutorial corto.
 - **👥 ONLINE → ⚡ Partida rápida:** entra a una sala abierta si hay alguna; si no, crea una y jugás contra la PC hasta que entre alguien.
 - **Salas abiertas:** la lista muestra las salas que están esperando gente; tocá *Entrar* y te pone en el equipo con menos personas. *Crear sala abierta* abre una nueva que todos ven.
