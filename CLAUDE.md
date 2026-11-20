@@ -10,9 +10,9 @@ El dueño escribe en español rioplatense (Uruguay); respondé y escribí los te
 - Los jugadores **no se mueven solos**: solo recorren la línea que el usuario dibuja arrastrándolos. Solo se ven los recorridos de tu equipo; los del rival no se dibujan.
 - La pelota **se pega** apenas toca el borde de un jugador (`RST`, arquero en su área `RKP`).
 - El que tiene la pelota no se mueve; los rivales se frenan a `S.cfg.bl` m de él (por defecto 5) y solo pueden cortar pases. Los compañeros se frenan a `S.cfg.bl+MATE` (1,5 m más). El arquero rival no tiene esa restricción: si llega a menos de `RST` del que tiene la pelota, se la saca.
-- Ajustes (botón ⚙): distancia de marca `S.cfg.bl` (2–10 m) y potencia máxima `S.cfg.pm` (60–140 %) viajan como acción `{k:'c'}` y valen para todo el partido online; el tiempo de carga del pase `CFG.ch` es local (localStorage `pt_cfg`).
+- Ajustes (botón ⚙): distancia de marca `S.cfg.bl` (2–10 m) y potencia máxima `S.cfg.pm` (60–140 %) viajan como acción `{k:'c'}` y valen para todo el partido online.
 - Preparación del pase (`b.kick`, `startKick`/`releaseKick`): la pelota sale `KWS`=14 ticks después (pase corto) o `KWL`=24 (largo, velocidad ≥ `VLONG` 17 m/s), para que se vea la patada. Durante la preparación no corre el reloj de 10 s.
-- Pase: tocar al que tiene la pelota → tocar y mantener el destino; el tiempo apretado es la potencia (llega al máximo en `CFG.ch` s, por defecto 1,1). Velocidad `VMIN`..`VMAX*S.cfg.pm`, frenado constante `AB`.
+- Pase (pedido del dueño): arrastrar desde el que tiene la pelota y soltar donde tiene que frenar (`hold`, `aimPass`). La fuerza es la justa para frenar ahí: v = √(2·AB·d), entre `VMIN` y `VMAX*S.cfg.pm` (menos de ~4 m no se puede: con `VMIN` frena a 4 m). Si se suelta a menos de 8 m del arco rival (y cerca de los palos) sale a máxima potencia. Soltar de nuevo sobre el jugador (menos de 2,6 m o encima de él) o tocarlo sin arrastrar no hace nada. En penales igual: arrastrar desde el pateador.
 - Saque del medio (`S.ko`): el rival no cruza la mitad hasta el primer pase del que saca.
 - Saque de arco (`S.gk`): el rival no entra al área grande hasta que saca el arquero.
 - Arco: `PO`=4,21 m de medio ancho (3,66 + 15 %, pedido del dueño). En 3D el arco es más alto que el arquero (`GH`/`GHB`/`GD`, solo visual).

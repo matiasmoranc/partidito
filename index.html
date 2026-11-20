@@ -632,7 +632,7 @@ function animate(dt,now){
     if(b.kick&&b.kick.i===i){yt=fyaw(b.kick.vx,b.kick.vy);rate=18;}
     else if(v.trap&&v.trap.dir!==null&&v.trap.t<.5)yt=v.trap.dir;
     else if(v.spd>.8&&v.mx!==undefined)yt=fyaw(v.mx,v.my);
-    else if(b.o===i){const myAim=team(i)===G.myTeam&&hold;if(myAim){yt=fyaw(hold.f.x-q.x,hold.f.y-q.y);rate=10;}else yt=fyaw(team(i)?-1:1,(CY-q.y)*0.01);rate=myAim?10:2.5;}
+    else if(b.o===i){const myAim=team(i)===G.myTeam&&hold&&hold.f;if(myAim){yt=fyaw(hold.f.x-q.x,hold.f.y-q.y);rate=10;}else yt=fyaw(team(i)?-1:1,(CY-q.y)*0.01);rate=myAim?10:2.5;}
     else{const bx=BV.x-v.x,by=BV.y-v.y;if(Math.hypot(bx,by)>.3)yt=fyaw(bx,by);rate=4;}
     if(S.ph==='pen'&&i===S.pen.dk)yt=fyaw(team(i)?-1:1,0);
     if(yt!==null){const d=angW(yt-v.yaw);v.yaw+=clamp(d,-rate*dt,rate*dt);v.yaw=angW(v.yaw);}
@@ -871,9 +871,9 @@ function draw(now){
   if(S.ph==='pen'&&S.pen.st==='aim'&&team(S.pen.dk)===G.myTeam&&G.myDive!==null){const D=S.p[S.pen.dk],a1=toS(D.x,G.myDive-0.4),a2=toS(D.x,G.myDive+0.4),m=toS(D.x,G.myDive);
     ctx.strokeStyle='#ffe678';ctx.lineWidth=3;ctx.setLineDash([4,3]);gArc(D.x,G.myDive,RKP);ctx.stroke();ctx.setLineDash([]);}
   // pase: línea y alcance según la potencia
-  if(passMode&&b.o>=0&&team(b.o)===G.myTeam){
-    const tgt=hold?hold.f:null;
-    if(tgt){const pw=holdPower(now),v=VMIN+pw*(VMAX*S.cfg.pm-VMIN),dist=v*v/(2*AB),dx=tgt.x-b.x,dy=tgt.y-b.y,l=sq(dx*dx+dy*dy)||1,dd=Math.min(dist,l),ex=b.x+dx/l*dd,ey=b.y+dy/l*dd;   // la línea de color termina donde tocaste (o antes, si no llega)
+  if(hold&&hold.live&&b.o===hold.i){const r=aimPass(hold);
+    if(r.cancel){const cx=D3?VS[b.o].x:b.x,cy=D3?VS[b.o].y:b.y;ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=2;ctx.setLineDash([4,4]);gArc(cx,cy,2.6);ctx.stroke();ctx.setLineDash([]);}
+    else{const tgt={x:r.tx,y:r.ty},pw=r.pw,dist=r.dist,dx=tgt.x-b.x,dy=tgt.y-b.y,l=sq(dx*dx+dy*dy)||1,dd=Math.min(dist,l),ex=b.x+dx/l*dd,ey=b.y+dy/l*dd;   // la línea de color termina donde soltás (o antes, si no llega)
       const s0=toS(b.x,b.y),s1=toS(ex,ey),st=toS(tgt.x,tgt.y);
       ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(s0.x,s0.y);ctx.lineTo(st.x,st.y);ctx.stroke();
       const pc=`hsl(${Math.round(120*(1-pw))},95%,52%)`;
@@ -885,7 +885,7 @@ function draw(now){
       const gr=ctx.createLinearGradient(bx,0,bx+bw,0);gr.addColorStop(0,'rgba(60,220,110,.25)');gr.addColorStop(.5,'rgba(255,210,60,.25)');gr.addColorStop(1,'rgba(255,70,60,.25)');
       ctx.fillStyle=gr;ctx.fillRect(bx,by,bw,bh);ctx.fillStyle=pc;ctx.fillRect(bx,by,bw*pw,bh);
       ctx.fillStyle=full&&Math.floor(now/120)%2?'#fff':'#ddd';ctx.fillRect(bx+bw,by-4,2.5,bh+8);
-      ctx.fillStyle='#fff';ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(full?'MÁX · '+Math.round(dist)+' m':Math.round(dist)+' m',bx+bw/2,by-5);}
+      ctx.fillStyle='#fff';ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(r.goal?'¡AL ARCO! · MÁX':full&&r.d>dist+0.5?'MÁX · no llega':Math.round(Math.min(r.d,dist))+' m',bx+bw/2,by-5);}
   }
   // pelota
   if(!D3){const bx=b.o>=0?b.x+(team(b.o)?-0.9:0.9):b.x,s=toS(bx,b.y),r=Math.max(4.5,SC*0.55);
@@ -904,9 +904,9 @@ function draw(now){
   let hint='';const myBall=b.o>=0&&team(b.o)===G.myTeam;
   if(G.mode==='online'&&!NET.host&&!NET.synced)hint='Conectando con la sala…';
   else if(S.ph==='end')hint='';
-  else if(S.ph==='pen'){const pe=S.pen;hint=pe.st!=='aim'?'':team(pe.k)===G.myTeam?(passMode?(hold?'Soltá para patear':'Penal: mantené apretado en el arco'):'Penal: tocá al que patea'):(G.myDive===null?'Penal: tocá adónde se tira tu arquero':'Tu arquero se tira ahí (el rival no lo ve)');}
-  else if(S.rs)hint='';else if(passMode)hint=hold?'Soltá para patear':'Tocá y mantené donde querés pasar';
-  else if(myBall)hint='Tocá al que tiene la pelota para pasar';
+  else if(S.ph==='pen'){const pe=S.pen;hint=pe.st!=='aim'?'':team(pe.k)===G.myTeam?(hold&&hold.live?'Soltá en el arco para patear':'Penal: arrastrá desde el que patea hasta el arco'):(G.myDive===null?'Penal: tocá adónde se tira tu arquero':'Tu arquero se tira ahí (el rival no lo ve)');}
+  else if(S.rs)hint='';else if(hold&&hold.live)hint='Soltá donde querés que frene · volvé al jugador para cancelar';
+  else if(myBall)hint='Arrastrá desde el que tiene la pelota para pasar';
   else hint='Arrastrá tus jugadores para moverlos';
   if(hint){ctx.font='13px system-ui';const w=ctx.measureText(hint).width+20;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(W/2-w/2,H-34,w,26);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText(hint,W/2,H-21);}
   // carteles
@@ -938,7 +938,15 @@ function chaseBall(){
   if(best<0)return;
   act({k:'m',i:best,path:[[Math.round(bp[0]*10)/10,Math.round(bp[1]*10)/10]]});G.chase={x:bp[0],y:bp[1],i:best,at:performance.now()};snd(500,700,0.05,0.07);
 }
-function holdPower(now){return clamp(((now||performance.now())-hold.at)/(CFG.ch*1000),0,1);}
+// a dónde y con qué fuerza: la justa para que la pelota frene donde soltaste; cerca del arco rival, a máxima potencia.
+// Soltar de nuevo sobre el que tiene la pelota (o sin haber arrastrado) cancela.
+function aimPass(h){const S=G.S,b=S.b;if(!h||!h.live||!h.f)return{cancel:true};
+  const t={x:clamp(h.f.x,-6,FW+6),y:clamp(h.f.y,-6,FH+6)},c=S.p[h.i];
+  if(Math.hypot(t.x-c.x,t.y-c.y)<2.6||pick(h.sx,h.sy)===h.i)return{cancel:true};
+  const gx=(S.ph==='pen'?S.pen.kt:team(h.i))?0:FW,vmax=VMAX*S.cfg.pm,d=Math.hypot(t.x-b.x,t.y-b.y);
+  const goal=Math.abs(t.x-gx)<8&&Math.abs(t.y-CY)<PO+5;
+  if(goal)return{tx:t.x,ty:t.y,pw:1,v:vmax,dist:vmax*vmax/(2*AB),goal:true,d};
+  const v=clamp(Math.sqrt(2*AB*d),VMIN,vmax);return{tx:t.x,ty:t.y,pw:Math.round((v-VMIN)/(vmax-VMIN)*100)/100,v,dist:v*v/(2*AB),d};}
 function pick(sx,sy){let best=-1,bd=1e9;const D3=is3D(),pen=G.S.ph==='pen';for(let i=0;i<10;i++){if(pen?team(i)!==G.myTeam:!mine(i))continue;const q=D3?VS[i]:G.S.p[i];
   if(D3){const a=toS(q.x,q.y,0),c=toS(q.x,q.y,2.1*MS),m=PXM(q.x,q.y);   // tocar en cualquier parte del cuerpo
     const ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,t=clamp(((sx-a.x)*ux+(sy-a.y)*uy)/l2,0,1),d=Math.hypot(sx-a.x-ux*t,sy-a.y-uy*t);if(d<Math.max(46,m*2.4)&&d<bd){bd=d;best=i;}}
@@ -964,12 +972,10 @@ cv.addEventListener('pointerdown',e=>{
   if(S.ph==='end')return;
   if(S.ph==='pen'){const pe=S.pen;if(pe.st!=='aim')return;
     if(team(pe.dk)===G.myTeam){const f=toF(x,y),yy=Math.round(clamp(f.y,CY-PO-1,CY+PO+1)*10)/10;G.myDive=yy;act({k:'d',i:pe.dk,y:yy});snd(600,500,0.05,0.06);return;}
-    if(i!==pe.k&&!passMode)return;}
-  if(passMode){if(i>=0&&i===b.o){tap={id:e.pointerId,i,x,y,at:performance.now(),cancel:true};return;}
-    hold={id:e.pointerId,at:performance.now(),f:toF(x,y)};return;}
+    if(i!==pe.k)return;}
   if(nearBall(x,y))ballTap={id:e.pointerId,x,y};
   if(i<0){if(is3D())pan={id:e.pointerId,x,y,moved:false};return;}   // en el pasto: mover la cámara
-  if(b.o===i){tap={id:e.pointerId,i,x,y,at:performance.now()};return;}
+  if(b.o===i){if(!b.kick)hold={id:e.pointerId,i,s0:[x,y],live:false,f:null};return;}   // pase: arrastrar desde el que tiene la pelota
   {const f0=toF(x,y);drag={id:e.pointerId,i,pts:[[S.p[i].x,S.p[i].y]],f0,s0:[x,y],live:false,off:[S.p[i].x-f0.x,S.p[i].y-f0.y],sm:null};}
 });
 cv.addEventListener('pointermove',e=>{
@@ -982,7 +988,7 @@ cv.addEventListener('pointermove',e=>{
     if(!drag.live){if(Math.hypot(x-drag.s0[0],y-drag.s0[1])<10)return;drag.live=true;}   // un temblor del dedo no cuenta
     const t=dragTarget(drag,x,y);drag.sm=drag.sm?[drag.sm[0]+(t[0]-drag.sm[0])*.55,drag.sm[1]+(t[1]-drag.sm[1])*.55]:t;drag.last=t;
     const l=drag.pts[drag.pts.length-1];if(Math.hypot(drag.sm[0]-l[0],drag.sm[1]-l[1])>1.2)drag.pts.push([Math.round(drag.sm[0]*10)/10,Math.round(drag.sm[1]*10)/10]);}
-  if(hold&&e.pointerId===hold.id)hold.f=toF(x,y);
+  if(hold&&e.pointerId===hold.id){if(!hold.live&&Math.hypot(x-hold.s0[0],y-hold.s0[1])<12)return;hold.live=true;hold.f=toF(x,y);hold.sx=x;hold.sy=y;}
 });
 function up(e){
   if(ballTap&&e.pointerId===ballTap.id){const bt=ballTap;ballTap=null;
@@ -994,8 +1000,8 @@ function up(e){
   if(drag&&e.pointerId===drag.id){const d=drag;drag=null;if(d.live&&d.pts.length>1&&e.type==='pointerup'){const ps=smoothPath(d);if(ps.length)act({k:'m',i:d.i,path:ps.slice(0,60)});}
     else if(e.type==='pointerup'&&G.S.p[d.i].path){act({k:'s',i:d.i});snd(400,300,0.05,0.05);}}
   if(tap&&e.pointerId===tap.id){const t=tap;tap=null;if(Math.hypot(e.clientX-t.x,e.clientY-t.y)<14){passMode=t.cancel?false:true;if(passMode)snd(600,800,0.05,0.06);}}
-  if(hold&&e.pointerId===hold.id){const h=hold,pw=Math.round(holdPower()*100)/100;hold=null;if(e.type==='pointerup'){const b=G.S.b;
-      if(b.o>=0&&team(b.o)===G.myTeam){act({k:'p',i:b.o,tx:Math.round(h.f.x*10)/10,ty:Math.round(h.f.y*10)/10,pw});snd(140,60,0.3+pw*0.4,0.12);}passMode=false;}}
+  if(hold&&e.pointerId===hold.id){const h=hold;hold=null;if(e.type==='pointerup'){const b=G.S.b,r=aimPass(h);
+      if(!r.cancel&&b.o===h.i){act({k:'p',i:b.o,tx:Math.round(r.tx*10)/10,ty:Math.round(r.ty*10)/10,pw:r.pw});snd(140,60,0.3+r.pw*0.4,0.12);}}}
 }
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 cv.addEventListener('contextmenu',e=>e.preventDefault());
@@ -1051,7 +1057,7 @@ function settings(){
     +row('bl','Distancia de marca del rival',2,10,0.5,c.bl,v=>(+v).toFixed(1)+' m')
     +'<p style="margin:2px 0 0;font-size:13px">Hasta dónde se puede acercar el rival al que tiene la pelota (el círculo punteado). Tus compañeros quedan 1,5 m más lejos y el arquero rival sí puede ir a sacársela.</p>'
     +row('pm','Potencia máxima del pase',60,140,5,Math.round(c.pm*100),v=>v+'%')
-    +row('ch','Tiempo para llegar a la potencia máxima',0.4,2.5,0.1,CFG.ch,v=>(+v).toFixed(1)+' s')
+
     +'<p style="margin:2px 0 0;font-size:13px">Más tiempo = más fácil dosificar pases suaves. Los dos primeros ajustes valen para todos los del partido online; el tiempo de carga es solo tuyo.</p>'
     +'<p style="margin:14px 0 4px;color:#fff">Cámara 3D</p><div style="display:flex;gap:6px">'
     +[['Costado',1],['Desde atrás',0]].map(([t,k])=>`<button data-a="${k}" style="flex:1;margin:4px 0;background:${CFG.ang===k?'#ffd23f':'#2c3a31'};color:${CFG.ang===k?'#111':'#fff'}">${t}</button>`).join('')+'</div>'
@@ -1060,8 +1066,8 @@ function settings(){
   pel.style.display='flex';
   pbox.querySelectorAll('[data-a]').forEach(el=>el.onclick=()=>{CFG.ang=+el.dataset.a;saveCfg();CAM.init=false;pbox.querySelectorAll('[data-a]').forEach(e2=>{const on=+e2.dataset.a===CFG.ang;e2.style.background=on?'#ffd23f':'#2c3a31';e2.style.color=on?'#111':'#fff';});});
   const g=id=>document.getElementById(id);
-  for(const [id,fmt] of [['bl',v=>(+v).toFixed(1)+' m'],['pm',v=>v+'%'],['ch',v=>(+v).toFixed(1)+' s']])g(id).oninput=()=>{g(id+'v').textContent=fmt(g(id).value);};
-  g('ok').onclick=()=>{const bl=+g('bl').value,pm=+g('pm').value/100;CFG.ch=+g('ch').value;CFG.bl=bl;CFG.pm=pm;saveCfg();
+  for(const [id,fmt] of [['bl',v=>(+v).toFixed(1)+' m'],['pm',v=>v+'%']])g(id).oninput=()=>{g(id+'v').textContent=fmt(g(id).value);};
+  g('ok').onclick=()=>{const bl=+g('bl').value,pm=+g('pm').value/100;CFG.bl=bl;CFG.pm=pm;saveCfg();
     if(bl!==G.S.cfg.bl||pm!==G.S.cfg.pm)act({k:'c',bl,pm});pel.style.display='none';banner('Ajustes guardados',900);};
 }
 /* =================== MENÚ, TUTORIAL Y FINAL =================== */
@@ -1082,7 +1088,7 @@ function menu(){
   onId('ol',()=>panel());onId('tu',()=>tutorial(0));
 }
 const TUT=[['👆','Mové a tus jugadores','Arrastrá un jugador con el dedo: recorre la línea que dibujes. Los jugadores no se mueven solos. Si lo tocás mientras corre, se frena ahí. Si tocás la pelota suelta, sale a buscarla el tuyo que llega primero.'],
-  ['🎯','Pasá la pelota','Tocá al que tiene la pelota y después mantené apretado donde querés pasar. Más tiempo apretado = más fuerte: la barrita va de verde a rojo.'],
+  ['🎯','Pasá la pelota','Arrastrá desde el que tiene la pelota hasta donde querés pasar y soltá: la pelota va con la fuerza justa para frenar ahí. Si soltás en el arco rival, sale con toda. Volvé al jugador y soltá para cancelar.'],
   ['⏱️','Tenés 10 segundos','El que tiene la pelota no se puede mover y tiene 10 segundos para pasarla (mirá el anillo). Si no, lateral para el rival. Tus compañeros tampoco se le pueden pegar.'],
   ['🛡️','Defendé','El rival no puede entrar al círculo punteado del que tiene la pelota: para recuperarla tenés que cortar los pases. Solo el arquero puede ir a sacársela: si toca la pelota, es suya.'],
   ['🏆','El partido','Dos tiempos de 5 minutos. Si empatan, 2 minutos de alargue y después penales. En los penales, el que ataja toca adónde se tira su arquero.']];
