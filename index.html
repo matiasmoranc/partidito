@@ -920,9 +920,16 @@ function chaseBall(){
 function holdPower(now){return clamp(((now||performance.now())-hold.at)/(CFG.ch*1000),0,1);}
 function pick(sx,sy){let best=-1,bd=1e9;const D3=is3D();for(let i=0;i<10;i++){if(team(i)!==G.myTeam)continue;const q=D3?VS[i]:G.S.p[i];
   if(D3){const a=toS(q.x,q.y,0),c=toS(q.x,q.y,2.1*MS),m=PXM(q.x,q.y);   // tocar en cualquier parte del cuerpo
-    const ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,t=clamp(((sx-a.x)*ux+(sy-a.y)*uy)/l2,0,1),d=Math.hypot(sx-a.x-ux*t,sy-a.y-uy*t);if(d<Math.max(24,m*1.1)&&d<bd){bd=d;best=i;}}
-  else{const s=toS(q.x,q.y),d=Math.hypot(s.x-sx,s.y-sy);if(d<Math.max(26,PR()*2)&&d<bd){bd=d;best=i;}}}return best;}
+    const ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,t=clamp(((sx-a.x)*ux+(sy-a.y)*uy)/l2,0,1),d=Math.hypot(sx-a.x-ux*t,sy-a.y-uy*t);if(d<Math.max(46,m*2.4)&&d<bd){bd=d;best=i;}}
+  else{const s=toS(q.x,q.y),d=Math.hypot(s.x-sx,s.y-sy);if(d<Math.max(40,PR()*3)&&d<bd){bd=d;best=i;}}}return best;}
 const PTR=new Map();let pinch=null,pan=null;
+// el dedo apoya sobre el cuerpo, no en los pies: la diferencia se va absorbiendo en los primeros 5 m, así la línea nunca arranca para atrás
+function dragTarget(d,x,y){const f=toF(x,y),dm=Math.hypot(f.x-d.f0.x,f.y-d.f0.y),k=clamp(dm/5,0,1);return[clamp(f.x+d.off[0]*(1-k),0.3,FW-0.3),clamp(f.y+d.off[1]*(1-k),0.3,FH-0.3)];}
+// recorrido final: suaviza zigzags chicos y saca puntos muy juntos
+function smoothPath(d){let p=d.pts.slice();if(d.last){const l=p[p.length-1];if(Math.hypot(d.last[0]-l[0],d.last[1]-l[1])>0.4)p.push(d.last);}
+  for(let r=0;r<2;r++){const q=p.map(a=>a.slice());for(let k=1;k<p.length-1;k++){q[k][0]=p[k-1][0]*.25+p[k][0]*.5+p[k+1][0]*.25;q[k][1]=p[k-1][1]*.25+p[k][1]*.5+p[k+1][1]*.25;}p=q;}
+  const o=[];let l=p[0];for(let k=1;k<p.length;k++){const a=p[k];if(Math.hypot(a[0]-l[0],a[1]-l[1])>=1.0||k===p.length-1){o.push([Math.round(a[0]*10)/10,Math.round(a[1]*10)/10]);l=a;}}
+  if(o.length>1&&Math.hypot(o[0][0]-d.pts[0][0],o[0][1]-d.pts[0][1])<0.8)o.shift();return o;}
 cv.addEventListener('pointerdown',e=>{
   e.preventDefault();const x=e.clientX,y=e.clientY;try{cv.setPointerCapture(e.pointerId);}catch(_){}
   PTR.set(e.pointerId,{x,y});
@@ -942,7 +949,7 @@ cv.addEventListener('pointerdown',e=>{
   if(nearBall(x,y))ballTap={id:e.pointerId,x,y};
   if(i<0){if(is3D())pan={id:e.pointerId,x,y,moved:false};return;}   // en el pasto: mover la cámara
   if(b.o===i){tap={id:e.pointerId,i,x,y,at:performance.now()};return;}
-  drag={id:e.pointerId,i,pts:[[S.p[i].x,S.p[i].y]]};
+  {const f0=toF(x,y);drag={id:e.pointerId,i,pts:[[S.p[i].x,S.p[i].y]],f0,s0:[x,y],live:false,off:[S.p[i].x-f0.x,S.p[i].y-f0.y],sm:null};}
 });
 cv.addEventListener('pointermove',e=>{
   const x=e.clientX,y=e.clientY;
@@ -950,7 +957,10 @@ cv.addEventListener('pointermove',e=>{
   if(pinch){if(PTR.size>=2){const [a,c]=[...PTR.values()];CFG.wv=clamp(pinch.w0*pinch.d0/(Math.hypot(a.x-c.x,a.y-c.y)||1),16,wvMax());}return;}
   if(pan&&e.pointerId===pan.id){if(!pan.moved&&Math.hypot(x-pan.x,y-pan.y)<7)return;pan.moved=true;
     const a=toF3(pan.x,pan.y),c=toF3(x,y);CAM.tx=clamp(CAM.tx+a.x-c.x,-4,FW+4);CAM.ty=clamp(CAM.ty+a.y-c.y,-4,FH+4);CAM.free=true;camUpdate(0,false);pan.x=x;pan.y=y;return;}
-  if(drag&&e.pointerId===drag.id){const f=toF(x,y),l=drag.pts[drag.pts.length-1];if(Math.hypot(f.x-l[0],f.y-l[1])>1.2)drag.pts.push([Math.round(f.x*10)/10,Math.round(f.y*10)/10]);}
+  if(drag&&e.pointerId===drag.id){
+    if(!drag.live){if(Math.hypot(x-drag.s0[0],y-drag.s0[1])<10)return;drag.live=true;}   // un temblor del dedo no cuenta
+    const t=dragTarget(drag,x,y);drag.sm=drag.sm?[drag.sm[0]+(t[0]-drag.sm[0])*.55,drag.sm[1]+(t[1]-drag.sm[1])*.55]:t;drag.last=t;
+    const l=drag.pts[drag.pts.length-1];if(Math.hypot(drag.sm[0]-l[0],drag.sm[1]-l[1])>1.2)drag.pts.push([Math.round(drag.sm[0]*10)/10,Math.round(drag.sm[1]*10)/10]);}
   if(hold&&e.pointerId===hold.id)hold.f=toF(x,y);
 });
 function up(e){
@@ -960,7 +970,7 @@ function up(e){
   PTR.delete(e.pointerId);
   if(pinch){if(PTR.size===0){pinch=null;saveCfg();}return;}
   if(pan&&e.pointerId===pan.id){pan=null;return;}
-  if(drag&&e.pointerId===drag.id){const d=drag;drag=null;if(d.pts.length>1&&e.type==='pointerup')act({k:'m',i:d.i,path:d.pts.slice(1,61)});
+  if(drag&&e.pointerId===drag.id){const d=drag;drag=null;if(d.live&&d.pts.length>1&&e.type==='pointerup'){const ps=smoothPath(d);if(ps.length)act({k:'m',i:d.i,path:ps.slice(0,60)});}
     else if(e.type==='pointerup'&&G.S.p[d.i].path){act({k:'s',i:d.i});snd(400,300,0.05,0.05);}}
   if(tap&&e.pointerId===tap.id){const t=tap;tap=null;if(Math.hypot(e.clientX-t.x,e.clientY-t.y)<14){passMode=t.cancel?false:true;if(passMode)snd(600,800,0.05,0.06);}}
   if(hold&&e.pointerId===hold.id){const h=hold,pw=Math.round(holdPower()*100)/100;hold=null;if(e.type==='pointerup'){const b=G.S.b;
