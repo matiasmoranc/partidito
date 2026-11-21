@@ -906,7 +906,7 @@ function draw(now){
   if(G.mode==='online'&&!NET.host&&!NET.synced)hint='Conectando con la sala…';
   else if(S.ph==='end')hint='';
   else if(S.ph==='pen'){const pe=S.pen;hint=pe.st!=='aim'?'':team(pe.k)===G.myTeam?(hold&&hold.live?'Soltá en el arco para patear':'Penal: arrastrá desde el que patea hasta el arco'):(G.myDive===null?'Penal: tocá adónde se tira tu arquero':'Tu arquero se tira ahí (el rival no lo ve)');}
-  else if(S.rs)hint='';else if(hold&&hold.live)hint='Soltá donde querés que frene · dejá quieto 1 s para más fuerza';
+  else if(S.rs)hint='';else if(hold&&hold.live)hint='Soltá donde querés que frene · dejá quieto para más fuerza';
   else if(myBall)hint='Arrastrá desde el que tiene la pelota para pasar';
   else hint='Arrastrá tus jugadores para moverlos';
   if(hint){ctx.font='13px system-ui';const w=ctx.measureText(hint).width+20;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(W/2-w/2,H-34,w,26);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText(hint,W/2,H-21);}
@@ -941,7 +941,7 @@ function chaseBall(){
 }
 // a dónde y con qué fuerza: la justa para que la pelota frene donde soltaste; cerca del arco rival, a máxima potencia.
 // Soltar de nuevo sobre el que tiene la pelota (o sin haber arrastrado) cancela.
-const CHARGE_WAIT=1000,CHARGE_FILL=1000;   // dedo quieto: a partir de 1 s la fuerza sube hasta el máximo en 1 s más
+const CHARGE_WAIT=600,CHARGE_FILL=1000,CHARGE_KEEP=45;   // dedo quieto: a partir de 0,6 s la fuerza sube hasta el máximo en 1 s más; ya cargando, solo se pierde si el dedo se mueve más de 45 px
 function aimPass(h,now){const S=G.S,b=S.b;if(!h||!h.live||!h.f)return{cancel:true};now=now||performance.now();
   const t={x:clamp(h.f.x,-6,FW+6),y:clamp(h.f.y,-6,FH+6)},c=S.p[h.i];
   if(Math.hypot(t.x-c.x,t.y-c.y)<2.6||pick(h.sx,h.sy)===h.i)return{cancel:true};
@@ -993,7 +993,8 @@ cv.addEventListener('pointermove',e=>{
     const t=dragTarget(drag,x,y);drag.sm=drag.sm?[drag.sm[0]+(t[0]-drag.sm[0])*.55,drag.sm[1]+(t[1]-drag.sm[1])*.55]:t;drag.last=t;
     const l=drag.pts[drag.pts.length-1];if(Math.hypot(drag.sm[0]-l[0],drag.sm[1]-l[1])>1.2)drag.pts.push([Math.round(drag.sm[0]*10)/10,Math.round(drag.sm[1]*10)/10]);}
   if(hold&&e.pointerId===hold.id){if(!hold.live&&Math.hypot(x-hold.s0[0],y-hold.s0[1])<12)return;hold.live=true;hold.f=toF(x,y);hold.sx=x;hold.sy=y;
-    if(!hold.sp||Math.hypot(x-hold.sp[0],y-hold.sp[1])>9){hold.sp=[x,y];hold.st=performance.now();}}   // si el dedo se mueve, vuelve a contar el segundo quieto
+    const charging=hold.st&&performance.now()-hold.st>CHARGE_WAIT;
+    if(!hold.sp||Math.hypot(x-hold.sp[0],y-hold.sp[1])>(charging?CHARGE_KEEP:9)){hold.sp=[x,y];hold.st=performance.now();}}   // moverlo bastante vuelve a empezar; un temblor no
 });
 function up(e){
   if(ballTap&&e.pointerId===ballTap.id){const bt=ballTap;ballTap=null;
