@@ -18,7 +18,6 @@ Fútbol táctico 5 contra 5 para el celular, en 3D low-poly (con estadio, hincha
 - **Partido con reloj:** dos tiempos de 5 minutos. Si empatan, 2 minutos de alargue y después penales. Al final, *Revancha*.
 - **Penales:** el que patea toca al pateador y mantiene apretado en el arco; el que ataja toca adónde se tira su arquero (el rival no lo ve).
 - Hay goles, laterales, córners y saques de arco.
-- **⚙ Ajustes:** distancia de marca del rival, potencia máxima del pase y tiempo de carga del pase.
 
 ## Contra la PC u online
 - **Online con compañeros:** si en tu equipo hay más de uno, los jugadores se reparten (el arquero le toca a uno al azar). Los tuyos dicen *VOS*; los de tu compañero, *J1*, *J2*… El rival no ve esas marcas.
