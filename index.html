@@ -78,6 +78,9 @@ function applyAct(S,a){
   }else if(a.k==='p'){
     if(b.o!==i||S.rs||b.kick)return;
     startKick(S,i,a);
+    // pase a un compañero que corre: se frena donde va a interceptar la pelota
+    if(b.kick&&a.rc!==undefined){const r=a.rc|0,rx=+a.rx,ry=+a.ry;if(r>=0&&r<10&&r!==i&&team(r)===team(i)&&isFinite(rx)&&isFinite(ry)){const R2=S.p[r],dx=rx-R2.x,dy=ry-R2.y;
+      if(R2.path&&dx*dx+dy*dy<900){R2.path=[[clamp(rx,0,FW),clamp(ry,0,FH)]];R2.pi=0;}}}
   }
 }
 function inArea(t,x,y){return y>CY-20.16&&y<CY+20.16&&(t?x>FW-16.5:x<16.5);}
@@ -889,8 +892,8 @@ function draw(now){
       const gr=ctx.createLinearGradient(bx,0,bx+bw,0);gr.addColorStop(0,'rgba(60,220,110,.25)');gr.addColorStop(.5,'rgba(255,210,60,.25)');gr.addColorStop(1,'rgba(255,70,60,.25)');
       ctx.fillStyle=gr;ctx.fillRect(bx,by,bw,bh);ctx.fillStyle=pc;ctx.fillRect(bx,by,bw*pw,bh);
       ctx.fillStyle=full&&Math.floor(now/120)%2?'#fff':'#ddd';ctx.fillRect(bx+bw,by-4,2.5,bh+8);
-      ctx.fillStyle='#fff';ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(r.goal?'¡AL ARCO! · MÁX':r.charged?(full?'MÁX':'FUERZA '+Math.round(pw*100)+'%')+(dist>r.d+1?' · sigue de largo':''):full&&r.d>dist+0.5?'MÁX · no llega':Math.round(Math.min(r.d,dist))+' m',bx+bw/2,by-5);
-      if(r.charged&&r.pw0<1){ctx.fillStyle='rgba(255,255,255,.85)';ctx.fillRect(bx+bw*r.pw0-1,by-2,2,bh+4);}}   // marca: dónde estaba la fuerza justa
+      ctx.fillStyle='#fff';ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(r.goal?'¡AL ARCO! · MÁX':r.flick?'¡FUERTE! '+Math.round(pw*100)+'%':r.mate>=0?'al pie del '+NUM[r.mate%5]:full&&r.d>dist+0.5?'MÁX · no llega':Math.round(Math.min(r.d,dist))+' m',bx+bw/2,by-5);
+      if(r.mate>=0){const q=D3?VS[r.mate]:S.p[r.mate];ctx.strokeStyle='#7dffa0';ctx.lineWidth=3;gArc(q.x,q.y,1.4);ctx.stroke();}}
   }
   // pelota
   if(!D3){const bx=b.o>=0?b.x+(team(b.o)?-0.9:0.9):b.x,s=toS(bx,b.y),r=Math.max(4.5,SC*0.55);
@@ -910,7 +913,7 @@ function draw(now){
   if(G.mode==='online'&&!NET.host&&!NET.synced)hint='Conectando con la sala…';
   else if(S.ph==='end')hint='';
   else if(S.ph==='pen'){const pe=S.pen;hint=pe.st!=='aim'?'':team(pe.k)===G.myTeam?(hold&&hold.live?'Soltá en el arco para patear':'Penal: arrastrá desde el que patea hasta el arco'):(G.myDive===null?'Penal: tocá adónde se tira tu arquero':'Tu arquero se tira ahí (el rival no lo ve)');}
-  else if(S.rs)hint='';else if(hold&&hold.live)hint='Soltá donde querés que frene · dejá quieto para más fuerza';
+  else if(S.rs)hint='';else if(hold&&hold.live)hint='Soltá en un compañero, en el pasto o en el arco · latigazo = fuerte';
   else if(myBall)hint='Arrastrá desde el que tiene la pelota para pasar';
   else hint='Arrastrá tus jugadores para moverlos';
   if(hint){ctx.font='13px system-ui';const w=ctx.measureText(hint).width+20;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(W/2-w/2,H-34,w,26);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText(hint,W/2,H-21);}
@@ -945,16 +948,34 @@ function chaseBall(){
 }
 // a dónde y con qué fuerza: la justa para que la pelota frene donde soltaste; cerca del arco rival, a máxima potencia.
 // Soltar de nuevo sobre el que tiene la pelota (o sin haber arrastrado) cancela.
-const CHARGE_WAIT=300,CHARGE_FILL=1000,CHARGE_KEEP=45;   // dedo quieto: a partir de 0,3 s la fuerza sube hasta el máximo en 1 s más; ya cargando, solo se pierde si el dedo se mueve más de 45 px
+// Pase (pedido del dueño): arrastrar desde el que tiene la pelota y soltar.
+//  · sobre un compañero: le llega al pie (si corre, adonde va a estar)   · en el pasto: frena ahí   · en el arco rival: tiro con toda
+//  · terminar con un latigazo (dedo rápido al soltar): sale fuerte, más cuanto más rápido
+const FLICK0=1300,FLICK1=3000;   // velocidad del dedo al soltar (px/s): desde dónde cuenta como latigazo y dónde llega al máximo
+function flickSpeed(h,now){const ss=(h.ss||[]).filter(p=>now-p.t<=110);if(ss.length<2||now-ss[ss.length-1].t>70)return 0;
+  const a=ss[0],z=ss[ss.length-1],dt=(z.t-a.t)/1000;return dt>0.008?Math.hypot(z.x-a.x,z.y-a.y)/dt:0;}
+// dónde va a estar el jugador i dentro de tb segundos siguiendo su recorrido
+function leadPos(i,tb){const q=G.S.p[i];let x=q.x,y=q.y,r=VP*tb;if(!q.path)return[x,y];
+  for(let k=q.pi;k<q.path.length&&r>0;k++){const p=q.path[k],dx=p[0]-x,dy=p[1]-y,l=Math.hypot(dx,dy);if(l<=r){x=p[0];y=p[1];r-=l;}else{x+=dx/l*r;y+=dy/l*r;r=0;}}return[x,y];}
+// ¿soltaste sobre un compañero?
+function mateAt(h,t){const S=G.S,D3=is3D();let best=-1,bd=1e9;
+  for(let i=0;i<10;i++){if(team(i)!==team(h.i)||i===h.i)continue;const q=D3?VS[i]:S.p[i],fd=Math.hypot(q.x-t.x,q.y-t.y);let d=fd<3.5?fd:1e9;
+    if(h.sx!==undefined){const a=toS(q.x,q.y,0),c=toS(q.x,q.y,D3?2.1*MS:0),ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,k=clamp(((h.sx-a.x)*ux+(h.sy-a.y)*uy)/l2,0,1),sd=Math.hypot(h.sx-a.x-ux*k,h.sy-a.y-uy*k);
+      if(sd<Math.max(34,PXM(q.x,q.y)*1.6))d=Math.min(d,sd/Math.max(1,PXM(q.x,q.y)));}
+    if(d<bd){bd=d;best=i;}}return best;}
 function aimPass(h,now){const S=G.S,b=S.b;if(!h||!h.live||!h.f)return{cancel:true};now=now||performance.now();
   const t={x:clamp(h.f.x,-6,FW+6),y:clamp(h.f.y,-6,FH+6)},c=S.p[h.i];
   if(Math.hypot(t.x-c.x,t.y-c.y)<2.6||pick(h.sx,h.sy)===h.i)return{cancel:true};
-  const gx=(S.ph==='pen'?S.pen.kt:team(h.i))?0:FW,vmax=VMAX*S.cfg.pm,d=Math.hypot(t.x-b.x,t.y-b.y);
-  const goal=Math.abs(t.x-gx)<8&&Math.abs(t.y-CY)<PO+5;
-  if(goal)return{tx:t.x,ty:t.y,pw:1,v:vmax,dist:vmax*vmax/(2*AB),goal:true,d};
-  const v0=clamp(Math.sqrt(2*AB*d),VMIN,vmax),pw0=(v0-VMIN)/(vmax-VMIN),held=h.st?now-h.st-CHARGE_WAIT:-1;
-  if(held>0){const pw=Math.round(Math.min(1,pw0+(1-pw0)*held/CHARGE_FILL)*100)/100,v=VMIN+pw*(vmax-VMIN);return{tx:t.x,ty:t.y,pw,v,dist:v*v/(2*AB),d,charged:true,pw0};}
-  return{tx:t.x,ty:t.y,pw:Math.round(pw0*100)/100,v:v0,dist:v0*v0/(2*AB),d,pw0};}
+  const gx=(S.ph==='pen'?S.pen.kt:team(h.i))?0:FW,vmax=VMAX*S.cfg.pm;
+  if(Math.abs(t.x-gx)<8&&Math.abs(t.y-CY)<PO+5){const d=Math.hypot(t.x-b.x,t.y-b.y);return{tx:t.x,ty:t.y,pw:1,v:vmax,dist:vmax*vmax/(2*AB),goal:true,d};}
+  let tx=t.x,ty=t.y,extra=0,mate=S.ph==='pen'?-1:mateAt(h,t);
+  if(mate>=0){let p=[S.p[mate].x,S.p[mate].y];extra=1.5;   // al pie: que le llegue con un poquito de sobra
+    for(let it=0;it<3;it++){const d=Math.hypot(p[0]-b.x,p[1]-b.y),v=clamp(Math.sqrt(2*AB*(d+extra)),VMIN,vmax),r=v*v-2*AB*d,tb=r>0?(v-Math.sqrt(r))/AB:d/v;p=leadPos(mate,tb+(b.o>=0?KWS*DT:0));}
+    tx=p[0];ty=p[1];}
+  const d=Math.hypot(tx-b.x,ty-b.y),v0=clamp(Math.sqrt(2*AB*(d+extra)),VMIN,vmax),pw0=(v0-VMIN)/(vmax-VMIN);
+  const fs=flickSpeed(h,now);
+  if(fs>FLICK0){const f=clamp((fs-FLICK0)/(FLICK1-FLICK0),0,1),pw=Math.round(Math.max(pw0,0.45+0.55*f)*100)/100,v=VMIN+pw*(vmax-VMIN);return{tx,ty,pw,v,dist:v*v/(2*AB),d,flick:true,mate,pw0};}
+  return{tx,ty,pw:Math.round(pw0*100)/100,v:v0,dist:v0*v0/(2*AB),d:d+extra,mate,pw0};}
 function pick(sx,sy){let best=-1,bd=1e9;const D3=is3D(),pen=G.S.ph==='pen';for(let i=0;i<10;i++){if(pen?team(i)!==G.myTeam:!mine(i))continue;const q=D3?VS[i]:G.S.p[i];
   if(D3){const a=toS(q.x,q.y,0),c=toS(q.x,q.y,2.1*MS),m=PXM(q.x,q.y);   // tocar en cualquier parte del cuerpo
     const ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,t=clamp(((sx-a.x)*ux+(sy-a.y)*uy)/l2,0,1),d=Math.hypot(sx-a.x-ux*t,sy-a.y-uy*t);if(d<Math.max(46,m*2.4)&&d<bd){bd=d;best=i;}}
@@ -997,8 +1018,7 @@ cv.addEventListener('pointermove',e=>{
     const t=dragTarget(drag,x,y);drag.sm=drag.sm?[drag.sm[0]+(t[0]-drag.sm[0])*.55,drag.sm[1]+(t[1]-drag.sm[1])*.55]:t;drag.last=t;
     const l=drag.pts[drag.pts.length-1];if(Math.hypot(drag.sm[0]-l[0],drag.sm[1]-l[1])>1.2)drag.pts.push([Math.round(drag.sm[0]*10)/10,Math.round(drag.sm[1]*10)/10]);}
   if(hold&&e.pointerId===hold.id){if(!hold.live&&Math.hypot(x-hold.s0[0],y-hold.s0[1])<12)return;hold.live=true;hold.f=toF(x,y);hold.sx=x;hold.sy=y;
-    const charging=hold.st&&performance.now()-hold.st>CHARGE_WAIT;
-    if(!hold.sp||Math.hypot(x-hold.sp[0],y-hold.sp[1])>(charging?CHARGE_KEEP:6)){hold.sp=[x,y];hold.st=performance.now();}}   // moverlo bastante vuelve a empezar; un temblor no
+    (hold.ss=hold.ss||[]).push({x,y,t:performance.now()});if(hold.ss.length>10)hold.ss.shift();}   // para medir el latigazo   // moverlo bastante vuelve a empezar; un temblor no
 });
 function up(e){
   if(ballTap&&e.pointerId===ballTap.id){const bt=ballTap;ballTap=null;
@@ -1010,8 +1030,8 @@ function up(e){
   if(drag&&e.pointerId===drag.id){const d=drag;drag=null;if(d.live&&d.pts.length>1&&e.type==='pointerup'){const ps=smoothPath(d);if(ps.length)act({k:'m',i:d.i,path:ps.slice(0,60)});}
     else if(e.type==='pointerup'&&G.S.p[d.i].path){act({k:'s',i:d.i});snd(400,300,0.05,0.05);}}
   if(tap&&e.pointerId===tap.id){const t=tap;tap=null;if(Math.hypot(e.clientX-t.x,e.clientY-t.y)<14){passMode=t.cancel?false:true;if(passMode)snd(600,800,0.05,0.06);}}
-  if(hold&&e.pointerId===hold.id){const h=hold;hold=null;if(e.type==='pointerup'){const b=G.S.b,r=aimPass(h,performance.now());
-      if(!r.cancel&&b.o===h.i){act({k:'p',i:b.o,tx:Math.round(r.tx*10)/10,ty:Math.round(r.ty*10)/10,pw:r.pw});snd(140,60,0.3+r.pw*0.4,0.12);}}}
+  if(hold&&e.pointerId===hold.id){const h=hold;hold=null;if(e.type==='pointerup'){const b=G.S.b,now=performance.now();if(h.live&&h.ss){h.ss.push({x:e.clientX,y:e.clientY,t:now});}const r=aimPass(h,now);
+      if(!r.cancel&&b.o===h.i){const a={k:'p',i:b.o,tx:Math.round(r.tx*10)/10,ty:Math.round(r.ty*10)/10,pw:r.pw};if(r.mate>=0&&G.S.p[r.mate].path){a.rc=r.mate;a.rx=a.tx;a.ry=a.ty;}act(a);snd(140,60,0.3+r.pw*0.4,0.12);if(r.flick&&!r.goal)banner('¡Fuerte!',600);}}}
 }
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 cv.addEventListener('contextmenu',e=>e.preventDefault());
@@ -1098,7 +1118,7 @@ function menu(){
   onId('ol',()=>panel());onId('tu',()=>tutorial(0));
 }
 const TUT=[['👆','Mové a tus jugadores','Arrastrá un jugador con el dedo: recorre la línea que dibujes. Los jugadores no se mueven solos. Si lo tocás mientras corre, se frena ahí. Si tocás la pelota suelta, sale a buscarla el tuyo que llega primero.'],
-  ['🎯','Pasá la pelota','Arrastrá desde el que tiene la pelota hasta donde querés pasar y soltá: la pelota va con la fuerza justa para frenar ahí. Si soltás en el arco rival, sale con toda. Volvé al jugador y soltá para cancelar.'],
+  ['🎯','Pasá la pelota','Arrastrá desde el que tiene la pelota y soltá: sobre un compañero le llega al pie; en el pasto frena ahí; en el arco rival es un tiro con toda. Para un pase fuerte, terminá con un latigazo (soltá con el dedo en movimiento rápido). Volvé al jugador y soltá para cancelar.'],
   ['⏱️','Tenés 10 segundos','El que tiene la pelota no se puede mover y tiene 10 segundos para pasarla (mirá el anillo). Si no, lateral para el rival. Tus compañeros tampoco se le pueden pegar.'],
   ['🛡️','Defendé','El rival no puede entrar al círculo punteado del que tiene la pelota: para recuperarla tenés que cortar los pases. Solo el arquero puede ir a sacársela: si toca la pelota, es suya.'],
   ['🏆','El partido','Dos tiempos de 5 minutos. Si empatan, 2 minutos de alargue y después penales. En los penales, el que ataja toca adónde se tira su arquero.']];
@@ -1148,7 +1168,7 @@ function frame(now){
 requestAnimationFrame(frame);
 menu();
 setTimeout(()=>{if(!window.claude&&(location.hash||'').length>2)panel();},900);
-window.__T={mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
+window.__T={aimPass,mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
 })();
 </script>
 </body>
