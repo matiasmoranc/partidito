@@ -879,6 +879,10 @@ function draw(now){
       const pc=`hsl(${Math.round(120*(1-pw))},95%,52%)`;
       ctx.strokeStyle=pc;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(s0.x,s0.y);ctx.lineTo(s1.x,s1.y);ctx.stroke();
       gArc(ex,ey,D3?.7:7/SC);ctx.stroke();
+      // sombra blanca donde va a frenar la pelota si soltás ahora (se mueve mientras carga)
+      {const sx=b.x+dx/l*dist,sy=b.y+dy/l*dist,pul=1+Math.sin(now*0.012)*.08;
+        if(dist>l+0.3){ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=2;ctx.setLineDash([3,5]);const a1=toS(ex,ey),a2=toS(sx,sy);ctx.beginPath();ctx.moveTo(a1.x,a1.y);ctx.lineTo(a2.x,a2.y);ctx.stroke();ctx.setLineDash([]);}
+        ctx.fillStyle='rgba(255,255,255,.42)';gArc(sx,sy,(D3?1.0:9/SC)*pul);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1.5;gArc(sx,sy,(D3?1.0:9/SC)*pul);ctx.stroke();}
       // barrita de potencia arriba del dedo: verde → amarillo → rojo, con el tope marcado
       const bw=64,bh=8,bx=clamp(st.x-bw/2,6,W-bw-6),by=Math.max(TOP+4,st.y-58),full=pw>=1;
       ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(bx-3,by-3,bw+6,bh+6);
@@ -941,7 +945,7 @@ function chaseBall(){
 }
 // a dónde y con qué fuerza: la justa para que la pelota frene donde soltaste; cerca del arco rival, a máxima potencia.
 // Soltar de nuevo sobre el que tiene la pelota (o sin haber arrastrado) cancela.
-const CHARGE_WAIT=600,CHARGE_FILL=1000,CHARGE_KEEP=45;   // dedo quieto: a partir de 0,6 s la fuerza sube hasta el máximo en 1 s más; ya cargando, solo se pierde si el dedo se mueve más de 45 px
+const CHARGE_WAIT=300,CHARGE_FILL=1000,CHARGE_KEEP=45;   // dedo quieto: a partir de 0,3 s la fuerza sube hasta el máximo en 1 s más; ya cargando, solo se pierde si el dedo se mueve más de 45 px
 function aimPass(h,now){const S=G.S,b=S.b;if(!h||!h.live||!h.f)return{cancel:true};now=now||performance.now();
   const t={x:clamp(h.f.x,-6,FW+6),y:clamp(h.f.y,-6,FH+6)},c=S.p[h.i];
   if(Math.hypot(t.x-c.x,t.y-c.y)<2.6||pick(h.sx,h.sy)===h.i)return{cancel:true};
@@ -994,7 +998,7 @@ cv.addEventListener('pointermove',e=>{
     const l=drag.pts[drag.pts.length-1];if(Math.hypot(drag.sm[0]-l[0],drag.sm[1]-l[1])>1.2)drag.pts.push([Math.round(drag.sm[0]*10)/10,Math.round(drag.sm[1]*10)/10]);}
   if(hold&&e.pointerId===hold.id){if(!hold.live&&Math.hypot(x-hold.s0[0],y-hold.s0[1])<12)return;hold.live=true;hold.f=toF(x,y);hold.sx=x;hold.sy=y;
     const charging=hold.st&&performance.now()-hold.st>CHARGE_WAIT;
-    if(!hold.sp||Math.hypot(x-hold.sp[0],y-hold.sp[1])>(charging?CHARGE_KEEP:9)){hold.sp=[x,y];hold.st=performance.now();}}   // moverlo bastante vuelve a empezar; un temblor no
+    if(!hold.sp||Math.hypot(x-hold.sp[0],y-hold.sp[1])>(charging?CHARGE_KEEP:6)){hold.sp=[x,y];hold.st=performance.now();}}   // moverlo bastante vuelve a empezar; un temblor no
 });
 function up(e){
   if(ballTap&&e.pointerId===ballTap.id){const bt=ballTap;ballTap=null;
