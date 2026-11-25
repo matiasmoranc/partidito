@@ -700,7 +700,7 @@ function buildWorld(theme){
     for(const yy of [CY-PO,CY+PO])n.quad(P(lx,yy,0),P(lx-d*GD,yy,0),P(lx-d*GD,yy,GHB),P(lx,yy,GH),nc);}
   MESH.net=n.v.length?mk(n):null;
 }
-function wantField(){return G.mode==='online'&&NET.rcfg&&NET.rcfg.field?NET.rcfg.field:(CFG.field||'clasica');}
+function wantField(){return G.mode==='online'&&NET.rcfg&&NET.rcfg.field?NET.rcfg.field:'clasica';}   // contra la PC siempre la clásica (pedido del dueño)
 // ---- cámara ----
 const CAM={tx:FW/2,ty:CY,eye:[0,50,50],r:[1,0,0],u:[0,1,0],f:[0,0,-1],tanV:.6,tanH:.3,VP:M4.id(),init:false};
 const TOPW=58;
@@ -1193,7 +1193,7 @@ document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
 /* =================== PANEL ONLINE =================== */
 let lobbyWait=false;
 const pel=document.getElementById('panel'),pbox=document.getElementById('pbox');
-const CR={n0:1,n1:1,t:0,f:null,priv:false,dur:10};const DURS=[5,8,10,12,16];   // formulario de crear partida
+const CR={n0:1,n1:1,t:0,f:'clasica',priv:false,dur:10};const DURS=[5,8,10,12,16];   // formulario de crear partida
 function fieldPicker(cur,attr){return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'+FIELD_IDS.map(f=>'<button data-'+attr+'="'+f+'" style="margin:0;padding:3px;border-radius:10px;overflow:hidden;background:'+(cur===f?'#ffd23f':'#2c3a31')+';color:'+(cur===f?'#111':'#fff')+';font-size:12px;font-weight:700;line-height:1.3"><img src="'+(FTHUMB[f]||'')+'" alt="" style="display:block;width:100%;aspect-ratio:8/5;object-fit:cover;border-radius:7px;background:'+FIELDS[f].map[0]+'">'+FIELDS[f].name+'</button>').join('')+'</div>';}
 const fmtF=f=>{const F=FIELDS[f]||FIELDS.clasica;return F.emo+' '+F.name;};
 const dots=(c,n,col)=>'<span style="letter-spacing:3px;color:'+col+'">'+'●'.repeat(Math.min(c,n))+'</span><span style="letter-spacing:3px;color:#556">'+'○'.repeat(Math.max(0,n-c))+'</span>';
@@ -1317,11 +1317,9 @@ function menu(){
     +(playing?BT('go','▶ Seguir jugando','#2e8a4a'):'')
     +'<p style="margin:10px 0 2px;color:#fff;font-weight:700">Nivel de la PC</p><div style="display:flex;gap:6px">'
     +lv.map((t,k)=>`<button data-l="${k}" style="flex:1;margin:4px 0;background:${k===CFG.lvl?'#ffd23f':'#2c3a31'};color:${k===CFG.lvl?'#111':'#fff'}">${t}</button>`).join('')+'</div>'
-    +'<p style="margin:10px 0 4px;color:#fff;font-weight:700">Cancha</p>'+fieldPicker(CFG.field,'fd')
     +BT('pc',G.mode==='pc'&&playing?'Nuevo partido contra la PC':'Jugar contra la PC',playing?'#2c3a31':'#2e8a4a')+BT('ol',G.mode==='online'?'👥 Sala online':'👥 Jugar online','#2b5d8a')+BT('tu','¿Cómo se juega?','#444');
   pel.style.display='flex';
   pbox.querySelectorAll('[data-l]').forEach(el=>el.onclick=()=>{CFG.lvl=+el.dataset.l;saveCfg();menu();});
-  pbox.querySelectorAll('[data-fd]').forEach(el=>el.onclick=()=>{CFG.field=el.dataset.fd;saveCfg();menu();});
   onId('go',()=>{pel.style.display='none';});
   onId('pc',()=>{if(G.mode==='online')netLeave();newGame(0);G.started=true;pel.style.display='none';G.panelKind='';
     banner(['Nivel fácil','Nivel medio','Nivel difícil'][CFG.lvl],1200);let done=false;try{done=localStorage.getItem('pt_tut')==='1';}catch(e){}if(!done)tutorial(0);});
