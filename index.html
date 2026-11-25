@@ -298,8 +298,8 @@ function targetTick(){
 }
 // Online: el que se une juega NET_BUF ticks detrás del anfitrión; el anfitrión programa sus jugadas HOST_DELAY ticks adelante,
 // y el que se une las suyas según el retraso medido (ping), así casi nunca llegan tarde y no hay que rebobinar.
-const NET_BUF=6,HOST_DELAY=6;
-function clientLead(){const rtt=NET.rtt||250;return clamp(Math.ceil(rtt/(DT*1000))+NET_BUF+3,10,58);}
+const NET_BUF=6,HOST_DELAY=4,CLIENT_LEAD=4,MAXBACK=50;   // MAXBACK: hasta cuántos ticks atrás acepta el anfitrión una jugada (≈0,8 s)
+function clientLead(){return CLIENT_LEAD;}
 function act(a){   // una acción del usuario o de la IA
   if(waiting()||(NET.spec&&G.mode==='online'))return;
   const id=(NET.me||'local')+':'+(++G.actN);
@@ -456,13 +456,14 @@ function onMsg(from,d){
     const p=NET.peers.find(q=>q.peer===from),mp=p&&p.presence&&p.presence.mp;if(!mp)return;
     const a=d.a;if(!a||(a.k!=='c'&&a.k!=='r'&&team(a.i|0)!==mp.team))return;
     if((a.k==='m'||a.k==='s'||a.k==='p')&&NET.own&&NET.own[a.i|0]&&NET.own[a.i|0]!==from&&G.S.ph!=='pen')return;   // ese jugador lo mueve otro
-    const tick=clamp(d.tick|0,G.S.tick+2,G.S.tick+60);const ev={id:String(d.id).slice(0,40),tick,a};insertEvent(ev);netSend({ty:'ev',ev});
+    const tick=clamp(d.tick|0,G.S.tick-MAXBACK,G.S.tick+60);   // la jugada va en el momento en que la hizo (rebobina si hace falta)
+    const ev={id:String(d.id).slice(0,40),tick,a};insertEvent(ev);netSend({ty:'ev',ev});
   }else if(from===hostId&&!NET.host){
     if(d.ty==='hb'){const off=performance.now()-d.ht;NET.off=NET.off===null?off:Math.min(off,NET.off+0.3);NET.hT0=d.t0;}
     else if(d.ty==='ev'&&d.ev&&typeof d.ev.tick==='number'){insertEvent({id:String(d.ev.id),tick:d.ev.tick,a:d.ev.a});}
     else if(d.ty==='snap'&&d.st&&typeof d.st.tick==='number'){
-      if(!NET.synced){G.S=cloneS(d.st);G.hist=new Map();G.hist.set(d.st.tick,cloneS(d.st));NET.synced=true;return;}   // primera foto: arranco desde ahí
-      NET.pend=d.st;checkSnap();
+      if(!NET.synced){const c=d.cur||d.st;G.S=cloneS(c);G.hist=new Map();G.hist.set(c.tick,cloneS(c));NET.synced=true;return;}   // primera foto: arranco desde ahí
+      if(d.fin!==false){NET.pend=d.st;checkSnap();}
     }
   }
 }
@@ -513,7 +514,8 @@ function netTick(){
   if(NET.open&&NET.kind==='mqtt'&&now-(NET.lastLob||0)>1000){NET.lastLob=now;const jp=joined();
     NET.room.pub(LOBBY+lobbyId(),{id:lobbyId(),p:{open:{code:NET.code,c0:jp.filter(p=>p.presence.mp.team===0).length,c1:jp.filter(p=>p.presence.mp.team===1).length,sc:G.S.sc.join('-'),t:Date.now(),
       n0:NET.rcfg?NET.rcfg.n0:5,n1:NET.rcfg?NET.rcfg.n1:5,f:NET.rcfg?NET.rcfg.field:'clasica',d:NET.rcfg?NET.rcfg.dur:10,v:NET.nSpec||0,st:NET.rcfg?NET.rcfg.st:1}}});}
-  if(now-NET.lastSnap>1500){NET.lastSnap=now;netSend({ty:'snap',st:cloneS(G.S)});}
+  if(now-NET.lastSnap>1500){NET.lastSnap=now;const old=G.hist.get(G.S.tick-MAXBACK-2);   // foto "firme": ya no puede cambiar por jugadas atrasadas
+    netSend(old?{ty:'snap',st:cloneS(old),cur:cloneS(G.S)}:{ty:'snap',st:cloneS(G.S),fin:false});}
 }
 /* =================== 3D (WebGL escrito a mano, estilo low-poly) =================== */
 // Todo lo de acá es solo dibujo: no toca la simulación, así que puede usar trigonometría y azar.
