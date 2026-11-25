@@ -25,6 +25,7 @@ Fútbol táctico 5 contra 5 para el celular, en 3D low-poly (con estadio, hincha
 - **Canchas:** clásica, estadio, nieve, potrero (tierra y arcos de palos) y calle. Se eligen solo online (la elige el que crea la partida); contra la PC se juega en la clásica. Solo cambia cómo se ve.
 - **👥 Jugar online → ➕ Crear partida:** elegís cuántos contra cuántos (de 1 a 5 personas por equipo, por defecto 1 vs 1), en qué equipo jugás, cuánto dura (5, 8, 10, 12 o 16 minutos; por defecto 10), la cancha y si es privada. El partido no arranca hasta que estén todos.
 - **Partidas creadas:** la lista muestra las que esperan gente y cuántos faltan; al entrar elegís equipo entre los que tienen lugar. 
+- **Mirar partidos:** en *Partidos en juego* tocá *👁 Mirar* para entrar como espectador (también en una privada con el código). Ves todo pero no manejás jugadores; a los que juegan les avisa que se unió un espectador.
 - **Privada:** no aparece en la lista; mandá el link o el código (*Entrar a una partida privada con código*). Los del mismo equipo se reparten los jugadores; si alguien se va, los suyos los juega la PC.
 - El online manda solo las jugadas (movimientos y pases), y cada teléfono calcula el partido igual, así que todos ven exactamente lo mismo.
 - Las jugadas viajan por un servidor MQTT público y gratuito (sin cuentas). A una sala privada puede entrar cualquiera que sepa el código, así que usá uno propio.
