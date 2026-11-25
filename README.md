@@ -22,9 +22,10 @@ Fútbol táctico 5 contra 5 para el celular, en 3D low-poly (con estadio, hincha
 ## Contra la PC u online
 - **Online con compañeros:** si en tu equipo hay más de uno, los jugadores se reparten (el arquero le toca a uno al azar). Los tuyos dicen *VOS*; los de tu compañero, *J1*, *J2*… El rival no ve esas marcas.
 - Al abrir aparece el menú (☰): elegí el nivel de la PC (fácil, medio o difícil), *Jugar contra la PC* o *Jugar online*. La primera vez hay un tutorial corto.
-- **👥 ONLINE → ⚡ Partida rápida:** entra a una sala abierta si hay alguna; si no, crea una y jugás contra la PC hasta que entre alguien.
-- **Salas abiertas:** la lista muestra las salas que están esperando gente; tocá *Entrar* y te pone en el equipo con menos personas. *Crear sala abierta* abre una nueva que todos ven.
-- **Sala privada con código:** no aparece en la lista; mandá el link para que entren. Los del mismo equipo comparten los jugadores; un equipo sin personas lo juega la PC.
+- **Canchas:** clásica, estadio, nieve, potrero (tierra y arcos de palos) y calle. Contra la PC se elige en el menú; online la elige el que crea la partida. Solo cambia cómo se ve.
+- **👥 Jugar online → ➕ Crear partida:** elegís cuántos contra cuántos (de 1 a 5 personas por equipo), en qué equipo jugás, la cancha y si es privada. El partido no arranca hasta que estén todos.
+- **Partidas creadas:** la lista muestra las que esperan gente y cuántos faltan; al entrar elegís equipo entre los que tienen lugar. *Partida rápida* entra a la primera o crea un 1 vs 1.
+- **Privada:** no aparece en la lista; mandá el link o el código (*Entrar a una partida privada con código*). Los del mismo equipo se reparten los jugadores; si alguien se va, los suyos los juega la PC.
 - El online manda solo las jugadas (movimientos y pases), y cada teléfono calcula el partido igual, así que todos ven exactamente lo mismo.
 - Las jugadas viajan por un servidor MQTT público y gratuito (sin cuentas). A una sala privada puede entrar cualquiera que sepa el código, así que usá uno propio.
 
