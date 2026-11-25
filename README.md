@@ -27,3 +27,5 @@ Fútbol táctico 5 contra 5 para el celular, en 3D low-poly (con estadio, hincha
 - **Sala privada con código:** no aparece en la lista; mandá el link para que entren. Los del mismo equipo comparten los jugadores; un equipo sin personas lo juega la PC.
 - El online manda solo las jugadas (movimientos y pases), y cada teléfono calcula el partido igual, así que todos ven exactamente lo mismo.
 - Las jugadas viajan por un servidor MQTT público y gratuito (sin cuentas). A una sala privada puede entrar cualquiera que sepa el código, así que usá uno propio.
+
+El juego se conecta a los tres servidores públicos a la vez (usa el que responda más rápido) y, si la red lo permite, abre una conexión directa entre los teléfonos (arriba dice "⚡ directo"); si no, sigue por los servidores ("☁ servidor").

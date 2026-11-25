@@ -308,51 +308,83 @@ function act(a){   // una acción del usuario o de la IA
 }
 function newGame(kt){G.S=newState(kt||0);G.events=[];G.hist=new Map();G.hist.set(0,cloneS(G.S));G.t0=performance.now();G.lastRsN=0;G.lastSc='0-0';G.lastKc=G.S.kc;G.lastAI=0;G.lastMsgN=0;G.myDive=null;passMode=false;drag=null;hold=null;}
 /* =================== ONLINE =================== */
-const NET={room:null,kind:'',on:false,host:true,me:'',team:0,peers:[],off:null,hT0:0,code:'',status:'',ob:[],obN:0,seen:{},lastHb:0,lastSnap:0,lastAI:0,synced:false};
+const NET={room:null,kind:'',on:false,host:true,me:'',team:0,peers:[],off:null,hT0:0,code:'',status:'',ob:[],obN:0,seen:{},lastHb:0,lastSnap:0,lastAI:0,synced:false,mids:new Set(),msgN:0};
 const MQTT_BROKERS=window.__BROKERS||['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081/mqtt'];
+// Cliente MQTT 3.1.1 mínimo. Se conecta a TODOS los servidores públicos a la vez y publica en todos:
+// el mensaje que llega primero gana (los repetidos se descartan por 'mid' en onMsg), así siempre va por el camino más rápido.
 function mqttRoom(code,onStatus,opts){
   opts=opts||{};
   const me='p'+Math.random().toString(36).slice(2,10),base='partidito/v1/'+code+'/';
   const enc=new TextEncoder(),dec=new TextDecoder();
-  let streams=[],ws=null,ok=false,myPres={},others={},subs=[],lastSend=0,pendT=null,bi=0,ping=null,closed=false;
+  let streams=[],myPres={},others={},subs=[],lastSend=0,pendT=null,ping=null,closed=false;
+  const conns=MQTT_BROKERS.map(url=>({url,ws:null,ok:false,buf:new Uint8Array(0),fails:0}));
+  const anyOk=()=>conns.some(c=>c.ok);
   const str=s=>{const b=enc.encode(s);return[b.length>>8,b.length&255,...b];};
   const varlen=n=>{const o=[];do{let d=n%128;n=Math.floor(n/128);if(n>0)d|=128;o.push(d);}while(n>0);return o;};
   const pkt=(h,body)=>new Uint8Array([h,...varlen(body.length),...body]);
-  function send(u8){if(ws&&ws.readyState===1)ws.send(u8);}
+  function sendC(c,u8){if(c.ws&&c.ws.readyState===1)try{c.ws.send(u8);}catch(e){}}
   function publish(topic,obj){const t=str(topic),p=enc.encode(JSON.stringify(obj));const body=new Uint8Array(t.length+p.length);body.set(t,0);body.set(p,t.length);
-    send(new Uint8Array([0x30,...varlen(body.length),...body]));}
+    const u8=new Uint8Array([0x30,...varlen(body.length),...body]);for(const c of conns)if(c.ok)sendC(c,u8);}
   function list(){const now=Date.now(),ps=[{peer:me,by:null,isMe:true,sameTab:true,kind:'viewer',guest:false,presence:myPres,updatedAt:now}];
     for(const id in others)ps.push({peer:id,by:null,isMe:false,sameTab:false,kind:'viewer',guest:false,presence:others[id].p,updatedAt:others[id].t});return ps;}
   function fire(){const ps=list();room._ps=ps;for(const f of subs)try{f({peers:ps,joined:[],left:[],updated:[]});}catch(e){}}
   function flush(){if(opts.silent)return;pendT=null;lastSend=performance.now();publish(base+'p/'+me,{id:me,p:myPres});}
-  let buf=new Uint8Array(0);
-  function onData(u8){const nb=new Uint8Array(buf.length+u8.length);nb.set(buf);nb.set(u8,buf.length);buf=nb;
-    while(buf.length>=2){let mul=1,len=0,i=1,b;do{if(i>=buf.length)return;b=buf[i++];len+=(b&127)*mul;mul*=128;}while(b&128);
-      if(buf.length<i+len)return;const type=buf[0]>>4,body=buf.slice(i,i+len);buf=buf.slice(i+len);
-      if(type===2){ok=true;send(pkt(0x82,[0,1,...str(base+'p/+'),0]));send(pkt(0x82,[0,2,...str(base+'s/+'),0]));flush();onStatus&&onStatus('ok');}
+  function onData(c,u8){const nb=new Uint8Array(c.buf.length+u8.length);nb.set(c.buf);nb.set(u8,c.buf.length);c.buf=nb;
+    while(c.buf.length>=2){let mul=1,len=0,i=1,b;do{if(i>=c.buf.length)return;b=c.buf[i++];len+=(b&127)*mul;mul*=128;}while(b&128);
+      if(c.buf.length<i+len)return;const type=c.buf[0]>>4,body=c.buf.slice(i,i+len);c.buf=c.buf.slice(i+len);
+      if(type===2){c.ok=true;c.fails=0;sendC(c,pkt(0x82,[0,1,...str(base+'p/+'),0]));sendC(c,pkt(0x82,[0,2,...str(base+'s/+'),0]));flush();onStatus&&onStatus('ok');}
       else if(type===3){const tl=(body[0]<<8)|body[1],topic=dec.decode(body.slice(2,2+tl)),payload=dec.decode(body.slice(2+tl));
         if(topic.indexOf('/s/')>=0){try{const m=JSON.parse(payload);if(m&&typeof m.id==='string'&&m.id!==me&&others[m.id])for(const f of streams)try{f(m.id,m.d);}catch(e){}}catch(e){}continue;}
         try{const m=JSON.parse(payload);if(m&&typeof m.id==='string'&&m.id!==me&&m.id.length<20){if(m.bye){delete others[m.id];}else if(m.p&&typeof m.p==='object'){const isNew=!others[m.id];others[m.id]={p:m.p,t:Date.now()};if(isNew)flush();}fire();}}catch(e){}}}}
-  function connect(){
-    if(closed)return;const url=MQTT_BROKERS[bi%MQTT_BROKERS.length];bi++;
-    try{ws=new WebSocket(url,'mqtt');}catch(e){setTimeout(connect,1500);return;}
-    ws.binaryType='arraybuffer';buf=new Uint8Array(0);
-    const to=setTimeout(()=>{if(!ok){try{ws.close();}catch(e){}}},6000);
-    ws.onopen=()=>{const body=[...str('MQTT'),4,0x02,0,60,...str(me)];send(pkt(0x10,body));};
-    ws.onmessage=e=>onData(new Uint8Array(e.data));
-    ws.onclose=()=>{clearTimeout(to);ok=false;onStatus&&onStatus('reconnect');if(!closed)setTimeout(connect,1200);};
+  function connect(c){
+    if(closed)return;let ws;
+    try{ws=new WebSocket(c.url,'mqtt');}catch(e){setTimeout(()=>connect(c),3000);return;}
+    c.ws=ws;ws.binaryType='arraybuffer';c.buf=new Uint8Array(0);
+    const to=setTimeout(()=>{if(!c.ok){try{ws.close();}catch(e){}}},6000);
+    ws.onopen=()=>{const body=[...str('MQTT'),4,0x02,0,60,...str(me)];sendC(c,pkt(0x10,body));};
+    ws.onmessage=e=>onData(c,new Uint8Array(e.data));
+    ws.onclose=()=>{clearTimeout(to);const was=c.ok;c.ok=false;c.fails++;if(!anyOk())onStatus&&onStatus('reconnect');if(!closed)setTimeout(()=>connect(c),Math.min(20000,(was?800:1500)*Math.min(c.fails,8)));};
     ws.onerror=()=>{};
   }
-  ping=setInterval(()=>{send(new Uint8Array([0xC0,0]));const now=Date.now();let ch=false;for(const id in others)if(now-others[id].t>4000){delete others[id];ch=true;}if(ch)fire();if(ok)flush();},1000);
+  ping=setInterval(()=>{for(const c of conns)if(c.ok)sendC(c,new Uint8Array([0xC0,0]));const now=Date.now();let ch=false;for(const id in others)if(now-others[id].t>4000){delete others[id];ch=true;}if(ch)fire();if(anyOk())flush();},1000);
   const room={code,
     presence(patch){myPres={...myPres};for(const k in patch){if(patch[k]===null)delete myPres[k];else myPres[k]=patch[k];}
       const now=performance.now();if(now-lastSend>45)flush();else if(!pendT)pendT=setTimeout(flush,45-(now-lastSend));fire();return Promise.resolve();},
     onPeers(f){subs.push(f);setTimeout(fire,0);return()=>{subs=subs.filter(x=>x!==f);};},
     send(d){publish(base+'s/'+me,{id:me,d});},pub(t,o){publish(t,o);},onStream(f){streams.push(f);},
-    peers(){return room._ps||list();},connected(){return ok;},
-    leave(){closed=true;try{publish(base+'p/'+me,{id:me,bye:1});}catch(e){}clearInterval(ping);setTimeout(()=>{try{ws.close();}catch(e){}},200);}};
-  connect();return room;
+    peers(){return room._ps||list();},connected(){return anyOk();},brokers(){return conns.filter(c=>c.ok).length;},
+    leave(){closed=true;try{publish(base+'p/'+me,{id:me,bye:1});}catch(e){}clearInterval(ping);setTimeout(()=>{for(const c of conns)try{c.ws&&c.ws.close();}catch(e){}},200);}};
+  for(const c of conns)connect(c);return room;
 }
+// ---- conexión directa entre teléfonos (WebRTC). Los servidores solo sirven para encontrarse (señalización);
+// si la conexión directa no se puede abrir (algunas redes de celular la bloquean), todo sigue por los servidores.
+const RTC_ICE=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']}];
+const P2P={};
+function p2pOk(){return NET.kind==='mqtt'&&typeof RTCPeerConnection==='function'&&!window.__NOP2P;}
+function p2pOthers(){return joined().filter(p=>!p.sameTab).map(p=>p.peer);}
+function p2pOpen(id){const o=P2P[id];return !!(o&&o.dc&&o.dc.readyState==='open');}
+function p2pClose(id){const o=P2P[id];if(!o)return;try{o.dc&&o.dc.close();}catch(e){}try{o.pc.close();}catch(e){}delete P2P[id];}
+function p2pCloseAll(){for(const id in P2P)p2pClose(id);}
+function iceDone(pc){return new Promise(r=>{if(pc.iceGatheringState==='complete')return r();const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);r();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(r,2500);});}
+function sig(to,m){if(NET.room&&typeof NET.room.send==='function')NET.room.send({ty:'sig',to,m,mid:NET.me+'s'+(++NET.msgN)});}
+function p2pMake(id){const pc=new RTCPeerConnection({iceServers:RTC_ICE}),o={pc,dc:null,t:performance.now()};P2P[id]=o;
+  o.wire=dc=>{o.dc=dc;dc.onmessage=e=>{try{onMsg(id,JSON.parse(e.data));}catch(_){}};dc.onopen=()=>{NET.p2pAt=performance.now();};};
+  pc.ondatachannel=e=>o.wire(e.channel);
+  pc.onconnectionstatechange=()=>{if(pc.connectionState==='failed'){o.failed=true;}};
+  return o;}
+async function p2pOffer(id){try{const o=p2pMake(id);o.wire(o.pc.createDataChannel('g',{ordered:false}));   // sin orden pero confiable: sin esperas por un paquete perdido
+  await o.pc.setLocalDescription(await o.pc.createOffer());await iceDone(o.pc);if(P2P[id]!==o)return;sig(id,{t:'o',sdp:o.pc.localDescription.sdp});}catch(e){}}
+async function onSig(from,m){if(!p2pOk()||!m)return;
+  try{if(m.t==='o'&&typeof m.sdp==='string'){p2pClose(from);const o=p2pMake(from);await o.pc.setRemoteDescription({type:'offer',sdp:m.sdp});
+      await o.pc.setLocalDescription(await o.pc.createAnswer());await iceDone(o.pc);if(P2P[from]!==o)return;sig(from,{t:'a',sdp:o.pc.localDescription.sdp});}
+    else if(m.t==='a'&&typeof m.sdp==='string'){const o=P2P[from];if(o&&o.pc.signalingState==='have-local-offer')await o.pc.setRemoteDescription({type:'answer',sdp:m.sdp});}}catch(e){}}
+// cada segundo: abrir conexiones que faltan (ofrece el de id menor), reintentar las que fallaron, cerrar las de los que se fueron
+function p2pSync(){if(!p2pOk()||!NET.on||!NET.me){return;}const ids=p2pOthers(),now=performance.now();
+  for(const id in P2P)if(!ids.includes(id))p2pClose(id);
+  for(const id of ids){const o=P2P[id];
+    if(o&&!p2pOpen(id)&&(o.failed||now-o.t>(NET.me<id?9000:20000))){p2pClose(id);NET.p2pFail=(NET.p2pFail||0)+1;}
+    if(!P2P[id]&&NET.me<id&&now-(NET.p2pRetry&&NET.p2pRetry[id]||0)>(NET.p2pFail>2?30000:4000)){(NET.p2pRetry=NET.p2pRetry||{})[id]=now;p2pOffer(id);}}}
+function p2pAll(){const ids=p2pOthers();return ids.length>0&&ids.every(p2pOpen);}
 const LOBBY='partidito/v1/lobby/p/';
 let lobby=null;
 function lobbyOpen(onCh){if(lobby)return;lobby=mqttRoom('lobby',null,{silent:true});lobby.onPeers(()=>onCh&&onCh());}
@@ -387,12 +419,20 @@ function netRecalc(){
 }
 function netSend(d){
   if(!NET.room)return;
-  if(typeof NET.room.send==='function'){NET.room.send(d);return;}
+  d.mid=(NET.me||'x')+'.'+(++NET.msgN);   // para descartar copias (llega por varios caminos)
+  if(typeof NET.room.send==='function'){
+    // directo a cada teléfono con conexión abierta; por los servidores si a alguno no le llega directo
+    const ids=p2pOk()?p2pOthers():[];let direct=ids.length>0;const js=JSON.stringify(d);
+    for(const id of ids){if(p2pOpen(id)){try{P2P[id].dc.send(js);}catch(e){direct=false;}}else direct=false;}
+    if(!direct||d.ty==='snap')NET.room.send(d);   // las fotos también por servidor (respaldo)
+    return;}
   NET.ob.push({n:++NET.obN,d});if(NET.ob.length>24)NET.ob.shift();
   NET.room.presence({ob:NET.ob}).catch(()=>{});
 }
 function onMsg(from,d){
   if(!d||typeof d!=='object')return;
+  if(d.mid){if(NET.mids.has(d.mid))return;NET.mids.add(d.mid);if(NET.mids.size>3000){const it=NET.mids.values();for(let k=0;k<1000;k++)NET.mids.delete(it.next().value);}}
+  if(d.ty==='sig'){if(d.to===NET.me)onSig(from,d.m);return;}
   const hostId=NET.hostPeer&&NET.hostPeer.peer;
   if(d.ty==='png'&&NET.host){netSend({ty:'pog',to:from,t:d.t});return;}
   if(d.ty==='pog'&&!NET.host){if(d.to===NET.me&&typeof d.t==='number'){const r=performance.now()-d.t;if(r>0&&r<5000)NET.rtt=NET.rtt?NET.rtt*0.8+r*0.2:r;}return;}
@@ -440,10 +480,11 @@ function netJoin(t){
   setTimeout(()=>{netRecalc();if(NET.host){newGame(0);NET.synced=true;}},900);
   banner(t?'Jugás con ROJO':'Jugás con CELESTE',1400);
 }
-function netLeave(){if(NET.room&&NET.kind==='mqtt'&&NET.open&&NET.host)NET.room.pub(LOBBY+lobbyId(),{id:lobbyId(),bye:1});NET.open=false;
+function netLeave(){p2pCloseAll();if(NET.room&&NET.kind==='mqtt'&&NET.open&&NET.host)NET.room.pub(LOBBY+lobbyId(),{id:lobbyId(),bye:1});NET.open=false;
   if(NET.room){NET.room.presence({mp:null,ob:null}).catch(()=>{});if(NET.kind==='mqtt'){const r=NET.room;setTimeout(()=>r.leave(),300);NET.room=null;}}
   NET.on=false;NET.host=true;G.mode='pc';G.myTeam=0;G.human=[true,false];newGame(0);}
 function netTick(){
+  {const now=performance.now();if(now-(NET.lastP2P||0)>1000){NET.lastP2P=now;p2pSync();}}
   if(NET.on&&!NET.host){checkSnap();const now=performance.now();if(now-(NET.lastPing||0)>1000){NET.lastPing=now;netSend({ty:'png',t:now});}return;}
   if(!NET.on||!NET.host)return;const now=performance.now();
   if(now-NET.lastHb>200){NET.lastHb=now;netSend({ty:'hb',ht:now,t0:G.t0});}
@@ -920,6 +961,8 @@ function draw(now){
     ctx.fillStyle='#ffd23f';ctx.fillText('PEN',12,42);ctx.fillStyle='#6cb4ee';ctx.fillText(dots(0),42,42);ctx.fillStyle='#ff7a70';ctx.fillText(dots(1),42+ctx.measureText(dots(0)).width+8,42);}
   else{const sec=Math.ceil(S.clk/60),txt=S.ph==='end'?'Final':({p1:'1er tiempo',p2:'2º tiempo',et:'Alargue'}[S.ph]+'  '+(sec/60|0)+':'+String(sec%60).padStart(2,'0'));
     ctx.fillStyle=S.ph!=='end'&&sec<=10?'#ffd23f':'#cfe3d6';ctx.fillText(txt,12,42);}
+  // online: por dónde va la conexión
+  if(G.mode==='online'&&NET.on){const d=p2pAll(),r=NET.rtt?Math.round(NET.rtt)+' ms':'';ctx.font='bold 11px system-ui';ctx.fillStyle=d?'#8dff9f':'#ffd27a';ctx.textAlign='left';ctx.fillText((d?'⚡ directo':'☁ servidor')+(r&&!NET.host?' · '+r:''),130,42);}
   for(const bt of buttons()){ctx.fillStyle=bt.on?'#2e8a4a':bt.small?'rgba(0,0,0,.45)':'rgba(255,255,255,.14)';ctx.fillRect(bt.x,bt.y,bt.w,bt.h);ctx.fillStyle='#fff';ctx.font=`bold ${bt.small?11:13}px system-ui`;ctx.textAlign='center';ctx.fillText(bt.t,bt.x+bt.w/2,bt.y+bt.h/2+1);}
   // ayuda contextual
   let hint='';const myBall=b.o>=0&&team(b.o)===G.myTeam;
@@ -1074,7 +1117,7 @@ function panel(){
   const B=(id,t,bg,fg)=>`<button id="${id}" style="background:${bg};color:${fg||'#fff'}">${t}</button>`;
   let h='<h2 style="margin:0 0 8px">👥 Jugar online</h2>';
   if(G.mode==='online'){const c0=joined().filter(p=>p.presence.mp.team===0).length,c1=joined().filter(p=>p.presence.mp.team===1).length;
-    h+=`<p>${NET.kind==='mqtt'?(NET.open?'':'Sala <b>'+NET.code+'</b> · ')+NET.status+'<br>':''}Jugás con <b style="color:${NET.team?'#ff7a70':'#6cb4ee'}">${NET.team?'ROJO':'CELESTE'}</b>${NET.host?' (tu teléfono lleva el reloj del partido)':''}.<br>Celeste: ${c0} · Rojo: ${c1}. Un equipo sin personas lo juega la PC.</p>`;
+    h+=`<p>${NET.kind==='mqtt'?(NET.open?'':'Sala <b>'+NET.code+'</b> · ')+NET.status+' · '+(p2pAll()?'⚡ conexión directa':'☁ por servidor ('+(NET.room&&NET.room.brokers?NET.room.brokers():0)+' conectados)')+'<br>':''}Jugás con <b style="color:${NET.team?'#ff7a70':'#6cb4ee'}">${NET.team?'ROJO':'CELESTE'}</b>${NET.host?' (tu teléfono lleva el reloj del partido)':''}.<br>Celeste: ${c0} · Rojo: ${c1}. Un equipo sin personas lo juega la PC.</p>`;
     if(NET.kind==='mqtt'&&NET.open)h+='<p style="color:#8dff9f">Sala abierta: cualquiera que entre a Partidito la ve y puede entrar.</p>';
     else if(NET.kind==='mqtt')h+=B('cp','📋 Copiar link para invitar','#2b5d8a')+'<p id="cpm" style="margin:0;color:#8dff9f;font-size:13px;min-height:16px"></p>';
     h+=B('lv','Volver a jugar contra la PC','#6b2a2a');}
@@ -1188,7 +1231,7 @@ function frame(now){
 requestAnimationFrame(frame);
 menu();
 setTimeout(()=>{if(!window.claude&&(location.hash||'').length>2)panel();},900);
-window.__T={aimPass,mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
+window.__T={p2pAll,aimPass,mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
 })();
 </script>
 </body>
