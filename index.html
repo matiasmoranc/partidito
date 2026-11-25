@@ -293,14 +293,18 @@ function advanceTo(T){
   if(G.events.length>600)G.events=G.events.filter(e=>e.tick>G.S.tick-420);
 }
 function targetTick(){
-  if(G.mode==='online'&&!NET.host){if(NET.off===null)return G.S.tick;return Math.floor((performance.now()-NET.off-NET.hT0)/(DT*1000));}
+  if(G.mode==='online'&&!NET.host){if(NET.off===null)return G.S.tick;return Math.floor((performance.now()-NET.off-NET.hT0)/(DT*1000))-NET_BUF;}
   return Math.floor((performance.now()-G.t0)/(DT*1000));
 }
+// Online: el que se une juega NET_BUF ticks detrás del anfitrión; el anfitrión programa sus jugadas HOST_DELAY ticks adelante,
+// y el que se une las suyas según el retraso medido (ping), así casi nunca llegan tarde y no hay que rebobinar.
+const NET_BUF=6,HOST_DELAY=6;
+function clientLead(){const rtt=NET.rtt||250;return clamp(Math.ceil(rtt/(DT*1000))+NET_BUF+3,10,58);}
 function act(a){   // una acción del usuario o de la IA
   const id=(NET.me||'local')+':'+(++G.actN);
   if(G.mode!=='online'){insertEvent({id,tick:G.S.tick+1,a});return;}
-  if(NET.host){const ev={id,tick:G.S.tick+5,a};insertEvent(ev);netSend({ty:'ev',ev});}
-  else{const tick=G.S.tick+12;insertEvent({id,tick,a,pred:true});netSend({ty:'in',id,tick,a});}
+  if(NET.host){const ev={id,tick:G.S.tick+HOST_DELAY,a};insertEvent(ev);netSend({ty:'ev',ev});}
+  else{const tick=G.S.tick+clientLead();insertEvent({id,tick,a,pred:true});netSend({ty:'in',id,tick,a});}
 }
 function newGame(kt){G.S=newState(kt||0);G.events=[];G.hist=new Map();G.hist.set(0,cloneS(G.S));G.t0=performance.now();G.lastRsN=0;G.lastSc='0-0';G.lastKc=G.S.kc;G.lastAI=0;G.lastMsgN=0;G.myDive=null;passMode=false;drag=null;hold=null;}
 /* =================== ONLINE =================== */
@@ -390,22 +394,27 @@ function netSend(d){
 function onMsg(from,d){
   if(!d||typeof d!=='object')return;
   const hostId=NET.hostPeer&&NET.hostPeer.peer;
+  if(d.ty==='png'&&NET.host){netSend({ty:'pog',to:from,t:d.t});return;}
+  if(d.ty==='pog'&&!NET.host){if(d.to===NET.me&&typeof d.t==='number'){const r=performance.now()-d.t;if(r>0&&r<5000)NET.rtt=NET.rtt?NET.rtt*0.8+r*0.2:r;}return;}
   if(d.ty==='in'&&NET.host){
     const p=NET.peers.find(q=>q.peer===from),mp=p&&p.presence&&p.presence.mp;if(!mp)return;
     const a=d.a;if(!a||(a.k!=='c'&&a.k!=='r'&&team(a.i|0)!==mp.team))return;
     if((a.k==='m'||a.k==='s'||a.k==='p')&&NET.own&&NET.own[a.i|0]&&NET.own[a.i|0]!==from&&G.S.ph!=='pen')return;   // ese jugador lo mueve otro
-    const tick=clamp(d.tick|0,G.S.tick+2,G.S.tick+45);const ev={id:String(d.id).slice(0,40),tick,a};insertEvent(ev);netSend({ty:'ev',ev});
+    const tick=clamp(d.tick|0,G.S.tick+2,G.S.tick+60);const ev={id:String(d.id).slice(0,40),tick,a};insertEvent(ev);netSend({ty:'ev',ev});
   }else if(from===hostId&&!NET.host){
     if(d.ty==='hb'){const off=performance.now()-d.ht;NET.off=NET.off===null?off:Math.min(off,NET.off+0.3);NET.hT0=d.t0;}
     else if(d.ty==='ev'&&d.ev&&typeof d.ev.tick==='number'){insertEvent({id:String(d.ev.id),tick:d.ev.tick,a:d.ev.a});}
     else if(d.ty==='snap'&&d.st&&typeof d.st.tick==='number'){
-      const st=d.st,mine=G.hist.get(st.tick);
-      const same=mine&&mine.ph===st.ph&&mine.clk===st.clk&&Math.abs(mine.b.x-st.b.x)<0.02&&Math.abs(mine.b.y-st.b.y)<0.02&&mine.b.o===st.b.o&&mine.sc[0]===st.sc[0]&&mine.sc[1]===st.sc[1]&&mine.p.every((q,i)=>Math.abs(q.x-st.p[i].x)<0.05&&Math.abs(q.y-st.p[i].y)<0.05);
-      if(!same){G.S=cloneS(st);for(const k of [...G.hist.keys()])if(k>=st.tick)G.hist.delete(k);G.hist.set(st.tick,cloneS(st));}
-      NET.synced=true;
+      if(!NET.synced){G.S=cloneS(d.st);G.hist=new Map();G.hist.set(d.st.tick,cloneS(d.st));NET.synced=true;return;}   // primera foto: arranco desde ahí
+      NET.pend=d.st;checkSnap();
     }
   }
 }
+function sameState(a,b){return a.ph===b.ph&&a.clk===b.clk&&Math.abs(a.b.x-b.b.x)<0.02&&Math.abs(a.b.y-b.b.y)<0.02&&a.b.o===b.b.o&&a.sc[0]===b.sc[0]&&a.sc[1]===b.sc[1]&&a.p.every((q,i)=>Math.abs(q.x-b.p[i].x)<0.05&&Math.abs(q.y-b.p[i].y)<0.05);}
+// la foto del anfitrión se compara cuando yo llego a ese momento; si no coincide, corrijo ahí y vuelvo a simular hasta ahora
+function checkSnap(){const st=NET.pend;if(!st||st.tick>G.S.tick)return;NET.pend=null;
+  const mine=G.hist.get(st.tick);if(mine&&sameState(mine,st))return;
+  const now=G.S.tick;G.S=cloneS(st);for(const k of [...G.hist.keys()])if(k>st.tick)G.hist.delete(k);G.hist.set(st.tick,cloneS(st));advanceTo(now);NET.fixes=(NET.fixes||0)+1;}
 function attachRoom(r,kind){
   NET.room=r;NET.kind=kind;NET.peers=[];
   r.onPeers(ch=>{NET.peers=ch.peers;
@@ -435,6 +444,7 @@ function netLeave(){if(NET.room&&NET.kind==='mqtt'&&NET.open&&NET.host)NET.room.
   if(NET.room){NET.room.presence({mp:null,ob:null}).catch(()=>{});if(NET.kind==='mqtt'){const r=NET.room;setTimeout(()=>r.leave(),300);NET.room=null;}}
   NET.on=false;NET.host=true;G.mode='pc';G.myTeam=0;G.human=[true,false];newGame(0);}
 function netTick(){
+  if(NET.on&&!NET.host){checkSnap();const now=performance.now();if(now-(NET.lastPing||0)>1000){NET.lastPing=now;netSend({ty:'png',t:now});}return;}
   if(!NET.on||!NET.host)return;const now=performance.now();
   if(now-NET.lastHb>200){NET.lastHb=now;netSend({ty:'hb',ht:now,t0:G.t0});}
   if(NET.open&&NET.kind==='mqtt'&&now-(NET.lastLob||0)>1000){NET.lastLob=now;const jp=joined();
@@ -771,6 +781,8 @@ function render3D(now,dt){
     else{const sx=WX(b.y),sz=WZ(b.x);
       if(!BV.ofs){BV.ofs=[(BV.wx===undefined?sx:BV.wx)-sx,(BV.wh===undefined?BR:BV.wh)-BR,(BV.wz===undefined?sz:BV.wz)-sz];}
       const d=Math.exp(-dt*9);BV.ofs=BV.ofs.map(x=>x*d);if(Math.hypot(BV.ofs[0],BV.ofs[2])>6)BV.ofs=[0,0,0];
+      // si la simulación corrigió la pelota (online), que se deslice en vez de saltar
+      if(BV.wx!==undefined){const nx=sx+BV.ofs[0],nz=sz+BV.ofs[2],jump=Math.hypot(nx-BV.wx,nz-BV.wz),sp=Math.hypot(b.vx,b.vy);if(jump>Math.max(0.6,sp*dt*2.5)&&jump<6){BV.ofs[0]+=BV.wx-nx;BV.ofs[2]+=BV.wz-nz;}}
       BV.wx=sx+BV.ofs[0];BV.wz=sz+BV.ofs[2];BV.wh=BR+BV.ofs[1];}
     const nx=BV.wx,nz=BV.wz;if(BV.px!==undefined){const dx=nx-BV.px,dz=nz-BV.pz,d=Math.hypot(dx,dz);if(d>1e-4&&d<3){const ax=dz/d,az=-dx/d,an=d/BR,c=Math.cos(an),s=Math.sin(an),C=1-c;
       const R=new Float32Array([c+ax*ax*C,az*s,az*ax*C,0, -az*s,c,ax*s,0, ax*az*C,-ax*s,c+az*az*C,0, 0,0,0,1]);BV.rot=M4.mul(R,BV.rot);}}
