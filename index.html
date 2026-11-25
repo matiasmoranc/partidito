@@ -301,7 +301,7 @@ function targetTick(){
 const NET_BUF=6,HOST_DELAY=4,CLIENT_LEAD=4,MAXBACK=50;   // MAXBACK: hasta cuántos ticks atrás acepta el anfitrión una jugada (≈0,8 s)
 function clientLead(){return CLIENT_LEAD;}
 function act(a){   // una acción del usuario o de la IA
-  if(waiting()||(NET.spec&&G.mode==='online'))return;
+  if(waiting()||paused()||(NET.spec&&G.mode==='online'))return;
   const id=(NET.me||'local')+':'+(++G.actN);
   if(G.mode!=='online'){insertEvent({id,tick:G.S.tick+1,a});return;}
   if(NET.host){const ev={id,tick:G.S.tick+HOST_DELAY,a};insertEvent(ev);netSend({ty:'ev',ev});}
@@ -374,22 +374,22 @@ function p2pCloseAll(){for(const id in P2P)p2pClose(id);}
 function iceDone(pc){return new Promise(r=>{if(pc.iceGatheringState==='complete')return r();const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);r();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(r,2500);});}
 function sig(to,m){if(NET.room&&typeof NET.room.send==='function')NET.room.send({ty:'sig',to,m,mid:NET.me+'s'+(++NET.msgN)});}
 function p2pMake(id){const pc=new RTCPeerConnection({iceServers:RTC_ICE}),o={pc,dc:null,t:performance.now()};P2P[id]=o;
-  o.wire=dc=>{o.dc=dc;dc.onmessage=e=>{try{onMsg(id,JSON.parse(e.data));}catch(_){}};dc.onopen=()=>{NET.p2pAt=performance.now();};};
+  o.wire=dc=>{o.dc=dc;dc.onmessage=e=>{try{onMsg(id,JSON.parse(e.data));}catch(_){}};dc.onopen=()=>{NET.p2pAt=performance.now();};dc.onclose=()=>{o.failed=true;};};
   pc.ondatachannel=e=>o.wire(e.channel);
   pc.onconnectionstatechange=()=>{if(pc.connectionState==='failed'){o.failed=true;}};
   return o;}
 async function p2pOffer(id){try{const o=p2pMake(id);o.wire(o.pc.createDataChannel('g',{ordered:false}));   // sin orden pero confiable: sin esperas por un paquete perdido
   await o.pc.setLocalDescription(await o.pc.createOffer());await iceDone(o.pc);if(P2P[id]!==o)return;sig(id,{t:'o',sdp:o.pc.localDescription.sdp});}catch(e){}}
-async function onSig(from,m){if(!p2pOk()||!m)return;
+async function onSig(from,m){if(!p2pOk()||!m||NET.spec)return;
   try{if(m.t==='o'&&typeof m.sdp==='string'){p2pClose(from);const o=p2pMake(from);await o.pc.setRemoteDescription({type:'offer',sdp:m.sdp});
       await o.pc.setLocalDescription(await o.pc.createAnswer());await iceDone(o.pc);if(P2P[from]!==o)return;sig(from,{t:'a',sdp:o.pc.localDescription.sdp});}
     else if(m.t==='a'&&typeof m.sdp==='string'){const o=P2P[from];if(o&&o.pc.signalingState==='have-local-offer')await o.pc.setRemoteDescription({type:'answer',sdp:m.sdp});}}catch(e){}}
 // cada segundo: abrir conexiones que faltan (ofrece el de id menor), reintentar las que fallaron, cerrar las de los que se fueron
-function p2pSync(){if(!p2pOk()||!NET.on||!NET.me){return;}const ids=p2pOthers(),now=performance.now();
+function p2pSync(){if(!p2pOk()||!NET.on||!NET.me||NET.spec){return;}/* los espectadores van por servidor */const ids=p2pOthers(),now=performance.now();
   for(const id in P2P)if(!ids.includes(id))p2pClose(id);
   for(const id of ids){const o=P2P[id];
     if(o&&!p2pOpen(id)&&(o.failed||now-o.t>(NET.me<id?9000:20000))){p2pClose(id);NET.p2pFail=(NET.p2pFail||0)+1;}
-    if(!P2P[id]&&NET.me<id&&now-(NET.p2pRetry&&NET.p2pRetry[id]||0)>(NET.p2pFail>2?30000:4000)){(NET.p2pRetry=NET.p2pRetry||{})[id]=now;p2pOffer(id);}}}
+    if(!P2P[id]&&NET.me<id&&now-(NET.p2pRetry&&NET.p2pRetry[id]||0)>(NET.p2pFail>2&&!waiting()&&!paused()?30000:4000)){(NET.p2pRetry=NET.p2pRetry||{})[id]=now;p2pOffer(id);}}}
 function p2pAll(){const ids=p2pOthers();return ids.length>0&&ids.every(p2pOpen);}
 const LOBBY='partidito/v1/lobby/p/';
 let lobby=null;
@@ -426,13 +426,33 @@ function netRecalc(){
   {const sp=NET.peers.filter(p=>p.presence&&p.presence.sp&&!p.sameTab).map(p=>p.peer);NET.nSpec=sp.length;NET.specSeen=NET.specSeen||new Set();
     let nw=0;for(const id of sp)if(!NET.specSeen.has(id)){NET.specSeen.add(id);nw++;}
     if(nw&&!NET.spec&&NET.specInit)banner(nw>1?'👁 Se unieron '+nw+' espectadores':'👁 Se unió un espectador',2000,false,true);NET.specInit=true;}
-  const wasWait=waiting();
-  if(!NET.host&&host&&host.presence.mp.rc&&typeof host.presence.mp.rc==='object'){const rc=host.presence.mp.rc;NET.rcfg={n0:clamp(rc.n0|0,1,5),n1:clamp(rc.n1|0,1,5),field:FIELDS[rc.field]?rc.field:'clasica',st:rc.st?1:0,dur:DURS.includes(rc.dur)?rc.dur:10};}
-  if(NET.host&&NET.rcfg&&!NET.rcfg.st&&teamCount(0)>=NET.rcfg.n0&&teamCount(1)>=NET.rcfg.n1){NET.rcfg={...NET.rcfg,st:1};G.t0=performance.now()-G.S.tick*DT*1000;}
+  const wasWait=waiting(),wasPz=paused();
+  if(!NET.host&&host&&host.presence.mp.rc&&typeof host.presence.mp.rc==='object'){const rc=host.presence.mp.rc;NET.rcfg={n0:clamp(rc.n0|0,1,5),n1:clamp(rc.n1|0,1,5),field:FIELDS[rc.field]?rc.field:'clasica',st:rc.st?1:0,dur:DURS.includes(rc.dur)?rc.dur:10,
+    srv:rc.srv?1:0,pz:rc.pz?1:0,dx:Array.isArray(rc.dx)?rc.dx.filter(x=>typeof x==='string').slice(0,12):[]};}
+  if(NET.host)roomCheck();
   pubRc();
-  if(wasWait&&!waiting()){banner('¡Están todos! Arranca el partido',1800,true);if(G.panelKind==='wait'){pel.style.display='none';G.panelKind='';}}
-  if(G.panelKind==='wait')waitPanel();
+  roomUI(wasWait,wasPz);
 }
+// ---- solo conexión directa (pedido del dueño): el partido arranca cuando todos los jugadores tienen directa con el anfitrión,
+// y se pausa si a alguno se le corta. Pasados 20 s el creador puede jugar igual por servidor (rcfg.srv). Los espectadores van por servidor.
+function needDirect(){return NET.kind==='mqtt'&&!!NET.rcfg&&!NET.rcfg.srv;}
+function paused(){return G.mode==='online'&&!!NET.rcfg&&!!NET.rcfg.st&&!!NET.rcfg.pz;}
+function noDirect(){return joined().filter(p=>!p.sameTab&&!p2pOpen(p.peer)).map(p=>p.peer);}   // (en el anfitrión) jugadores sin directa
+function roomCheck(){   // solo el anfitrión
+  const rc=NET.rcfg;if(!rc)return;const miss=needDirect()?noDirect():[],now=performance.now();
+  const dx=joined().filter(p=>!p.sameTab&&p2pOpen(p.peer)).map(p=>p.peer).sort();let n={...rc};
+  if(JSON.stringify(dx)!==JSON.stringify(rc.dx||[]))n.dx=dx;
+  if(!rc.st){if(teamCount(0)>=rc.n0&&teamCount(1)>=rc.n1&&!miss.length){n.st=1;n.pz=0;G.t0=now-G.S.tick*DT*1000;}}
+  else if(!rc.srv){if(miss.length){NET.missAt=NET.missAt||now;if(!rc.pz&&now-NET.missAt>800)n.pz=1;}else{NET.missAt=0;if(rc.pz){n.pz=0;G.t0=now-G.S.tick*DT*1000;}}}
+  else if(rc.pz)n.pz=0;
+  if(JSON.stringify(n)!==JSON.stringify(rc))NET.rcfg=n;}
+function roomUI(wasWait,wasPz){
+  if(wasWait&&!waiting()){banner('¡Están todos! Arranca el partido',1800,true);if(G.panelKind==='wait'){pel.style.display='none';G.panelKind='';}}
+  if(!wasPz&&paused()){NET.pzAt=performance.now();if(!NET.spec&&(G.panelKind===''||G.panelKind==='wait'||pel.style.display!=='flex'))waitPanel();}
+  if(wasPz&&!paused()){banner('▶ Volvió la conexión directa',1600);if(G.panelKind==='wait'){pel.style.display='none';G.panelKind='';}}
+  if(G.panelKind==='wait')waitPanel();}
+function playerLabel(p,jp){const t=p.presence.mp.team,at=q=>+q.presence.mp.at||9e15,ms=jp.filter(q=>q.presence.mp.team===t).sort((a,b)=>at(a)-at(b)||(a.peer<b.peer?-1:1));
+  return (t?'Rojo':'Celeste')+(ms.length>1?' '+(ms.indexOf(p)+1):'');}
 function netSend(d){
   if(!NET.room)return;
   d.mid=(NET.me||'x')+'.'+(++NET.msgN);   // para descartar copias (llega por varios caminos)
@@ -440,7 +460,7 @@ function netSend(d){
     // directo a cada teléfono con conexión abierta; por los servidores si a alguno no le llega directo
     const ids=p2pOk()?p2pOthers():[];let direct=ids.length>0;const js=JSON.stringify(d);
     for(const id of ids){if(p2pOpen(id)){try{P2P[id].dc.send(js);}catch(e){direct=false;}}else direct=false;}
-    if(!direct||d.ty==='snap')NET.room.send(d);   // las fotos también por servidor (respaldo)
+    if(!direct||d.ty==='snap'||NET.peers.some(p=>!p.sameTab&&p.presence&&p.presence.sp))NET.room.send(d);   /* los espectadores reciben por servidor */   // las fotos también por servidor (respaldo)
     return;}
   NET.ob.push({n:++NET.obN,d});if(NET.ob.length>24)NET.ob.shift();
   NET.room.presence({ob:NET.ob}).catch(()=>{});
@@ -509,6 +529,9 @@ function netLeave(){p2pCloseAll();if(NET.room&&NET.kind==='mqtt'&&NET.open&&NET.
 function netTick(){
   {const now=performance.now();if(now-(NET.lastP2P||0)>1000){NET.lastP2P=now;p2pSync();}}
   if(NET.on&&!NET.host){checkSnap();const now=performance.now();if(now-(NET.lastPing||0)>1000){NET.lastPing=now;netSend({ty:'png',t:now});}return;}
+  if(NET.on&&G.mode==='online'){const t=performance.now();if(t-(NET.lastRoom||0)>500){NET.lastRoom=t;
+    if(NET.host){const ww=waiting(),wp=paused(),old=JSON.stringify(NET.rcfg);roomCheck();if(JSON.stringify(NET.rcfg)!==old){pubRc();roomUI(ww,wp);}}
+    if(G.panelKind==='wait')waitPanel();}}
   if(!NET.on||!NET.host)return;const now=performance.now();
   if(now-NET.lastHb>200){NET.lastHb=now;netSend({ty:'hb',ht:now,t0:G.t0});}
   if(NET.open&&NET.kind==='mqtt'&&now-(NET.lastLob||0)>1000){NET.lastLob=now;const jp=joined();
@@ -1058,6 +1081,7 @@ function draw(now){
   let hint='';const myBall=b.o>=0&&team(b.o)===G.myTeam;
   if(G.mode==='online'&&!NET.host&&!NET.synced)hint='Conectando con la sala…';
   else if(S.ph==='end')hint='';
+  else if(paused())hint='⏸ Pausa: esperando la conexión directa';
   else if(NET.spec&&G.mode==='online')hint='👁 Estás mirando · arrastrá para mover la cámara';
   else if(S.ph==='pen'){const pe=S.pen;hint=pe.st!=='aim'?'':team(pe.k)===G.myTeam?(hold&&hold.live?'Soltá en el arco para patear':'Penal: arrastrá desde el que patea hasta el arco'):(G.myDive===null?'Penal: tocá adónde se tira tu arquero':'Tu arquero se tira ahí (el rival no lo ve)');}
   else if(S.rs)hint='';else if(hold&&hold.live)hint='Soltá en un compañero o en el arco · en el pasto, frená el dedo para cargar';
@@ -1315,15 +1339,31 @@ function startRoom(c){pel.style.display='none';G.panelKind='';lobbyClose();if(G.
   const tr=()=>{if(NET.room&&NET.room.connected()){G.started=true;netJoin(c.t);}else if(n++<30)setTimeout(tr,400);else{banner('No se pudo conectar',1600);NET.rcfg=null;}};tr();}
 // sala de espera: el partido no arranca hasta que estén todos
 function waitPanel(){
-  G.panelKind='wait';const rc=NET.rcfg,c0=teamCount(0),c1=teamCount(1),falt=Math.max(0,rc.n0-c0)+Math.max(0,rc.n1-c1);
-  const row=(t,c,n)=>'<div style="display:flex;align-items:center;gap:8px;margin:6px 0;background:#1d2a22;border-radius:10px;padding:8px"><span style="flex:1;text-align:left"><b style="color:'+(t?'#ff7a70':'#6cb4ee')+'">'+(t?'ROJO':'CELESTE')+'</b>'+(NET.team===t?' (vos)':'')+'</span>'+dots(c,n,t?'#ff7a70':'#6cb4ee')+'<b style="color:#fff;margin-left:6px">'+Math.min(c,n)+'/'+n+'</b></div>';
-  pbox.innerHTML='<div style="text-align:center;font-size:44px">⏳</div><h2 style="text-align:center;margin:2px 0">Esperando jugadores</h2>'
-    +'<p style="text-align:center;margin:0 0 6px"><b style="color:#fff">'+rc.n0+' vs '+rc.n1+'</b> · '+fmtF(rc.field)+' · '+(rc.dur||10)+' min</p>'+row(0,c0,rc.n0)+row(1,c1,rc.n1)
-    +'<p style="text-align:center;color:#ffd76a;font-size:17px;margin:8px 0">'+(falt?'Falta'+(falt>1?'n ':' ')+falt+(falt>1?' jugadores':' jugador'):'¡Listo!')+'</p>'
-    +(NET.kind==='mqtt'?(NET.open?'<p style="text-align:center;font-size:13px">La partida aparece en “Jugar online” para cualquiera que entre a Partidito.</p>':'<p style="text-align:center;font-size:13px">Partida privada · código <b>'+NET.code+'</b></p>'+BT('cp','📋 Copiar link para invitar','#2b5d8a')+'<p id="cpm" style="margin:0;color:#8dff9f;font-size:13px;min-height:16px;text-align:center"></p>'):'')
+  G.panelKind='wait';const rc=NET.rcfg,c0=teamCount(0),c1=teamCount(1),falt=Math.max(0,rc.n0-c0)+Math.max(0,rc.n1-c1),now=performance.now();
+  const jp=joined(),hostId=NET.hostPeer&&NET.hostPeer.peer,dx=rc.dx||[],nd=needDirect()&&!rc.srv,pz=paused();
+  const hasD=p=>p.peer===hostId||dx.includes(p.peer);
+  const full=!falt;if(full&&!rc.st){NET.fullAt=NET.fullAt||now;}else if(!rc.st)NET.fullAt=0;
+  const since=pz?now-(NET.pzAt||now):full?now-(NET.fullAt||now):0,late=nd&&since>20000;
+  const row=(t,c,n)=>'<div style="display:flex;align-items:center;gap:8px;margin:6px 0;background:#1d2a22;border-radius:10px;padding:8px"><span style="flex:1;text-align:left"><b style="color:'+(t?'#ff7a70':'#6cb4ee')+'">'+(t?'ROJO':'CELESTE')+'</b>'+(NET.team===t&&!NET.spec?' (vos)':'')+'</span>'+dots(c,n,t?'#ff7a70':'#6cb4ee')+'<b style="color:#fff;margin-left:6px">'+Math.min(c,n)+'/'+n+'</b></div>';
+  const lst=nd?'<div style="background:#1d2a22;border-radius:10px;padding:6px 10px;margin:6px 0"><p style="margin:0 0 4px;color:#fff;font-weight:700">⚡ Conexión directa</p>'
+    +jp.slice().sort((a,b)=>a.presence.mp.team-b.presence.mp.team||(+a.presence.mp.at)-(+b.presence.mp.at)).map(p=>'<div style="display:flex;justify-content:space-between;font-size:14px;margin:2px 0"><span>'+playerLabel(p,jp)+(p.sameTab?' (vos)':'')+(p.peer===hostId?' · creador':'')+'</span><span>'+(hasD(p)?'✅':'⏳')+'</span></div>').join('')+'</div>':'';
+  const miss=jp.filter(p=>!hasD(p)),meMiss=miss.some(p=>p.sameTab);
+  const warn=late&&miss.length?'<p style="background:#5a2a12;border-radius:10px;padding:8px;margin:6px 0;color:#ffe3c2;font-size:14px">'
+    +(meMiss?'<b>Tu teléfono no logra la conexión directa.</b> Pasate a wifi y apagá la VPN si tenés una.':'<b>'+miss.map(p=>playerLabel(p,jp)).join(', ')+'</b> no logra'+(miss.length>1?'n':'')+' la conexión directa. Que se pase'+(miss.length>1?'n':'')+' a wifi y apague'+(miss.length>1?'n':'')+' la VPN.')+'</p>':'';
+  const title=pz?['⏸','Partido en pausa']:full&&!rc.st?['⚡','Conectando directo…']:['⏳','Esperando jugadores'];
+  const msg=pz?'Se cortó la conexión directa'+(miss.length?' de '+miss.map(p=>playerLabel(p,jp)).join(', '):'')+'. El partido sigue cuando vuelva.'
+    :full&&!rc.st?'Están todos. Arranca apenas cada uno tenga conexión directa con el creador.'
+    :(falt?'Falta'+(falt>1?'n ':' ')+falt+(falt>1?' jugadores':' jugador'):'¡Listo!');
+  const html='<i data-wp></i><div style="text-align:center;font-size:44px">'+title[0]+'</div><h2 style="text-align:center;margin:2px 0">'+title[1]+'</h2>'
+    +'<p style="text-align:center;margin:0 0 6px"><b style="color:#fff">'+rc.n0+' vs '+rc.n1+'</b> · '+fmtF(rc.field)+' · '+(rc.dur||10)+' min</p>'+(pz?'':row(0,c0,rc.n0)+row(1,c1,rc.n1))
+    +'<p style="text-align:center;color:#ffd76a;font-size:16px;margin:8px 0">'+msg+'</p>'+lst+warn
+    +(late&&NET.host&&!NET.spec?BT('srv','☁ Jugar igual por servidor','#7a5a12')+'<p style="margin:0 0 6px;font-size:12px;text-align:center">Por servidor las jugadas de los demás llegan con más demora.</p>':'')
+    +(!pz&&NET.kind==='mqtt'?(NET.open?'<p style="text-align:center;font-size:13px">La partida aparece en “Jugar online” para cualquiera que entre a Partidito.</p>':'<p style="text-align:center;font-size:13px">Partida privada · código <b>'+NET.code+'</b></p>'+BT('cp','📋 Copiar link para invitar','#2b5d8a')+'<p id="cpm" style="margin:0;color:#8dff9f;font-size:13px;min-height:16px;text-align:center"></p>'):'')
     +BT('lv','Salir','#6b2a2a');
   pel.style.display='flex';
+  if(pbox.dataset.h===html&&pbox.querySelector('[data-wp]'))return;pbox.dataset.h=html;pbox.innerHTML=html;   // solo se redibuja si cambió (si no, se pierden toques)
   onId('cp',()=>copyLink(NET.code));onId('lv',()=>{pel.style.display='none';G.panelKind='';netLeave();menu();});
+  onId('srv',()=>{if(!NET.host||!NET.rcfg)return;const ww=waiting(),wp=paused();NET.rcfg={...NET.rcfg,srv:1,pz:0};G.t0=performance.now()-G.S.tick*DT*1000;roomCheck();pubRc();roomUI(ww,wp);});
 }
 function settings(){
   G.panelKind='cfg';
@@ -1391,9 +1431,9 @@ pel.addEventListener('pointerdown',e=>e.stopPropagation());
 function frame(now){
   // contra la PC el partido se pausa mientras hay un menú abierto
   if(G.mode==='pc'&&pel.style.display==='flex')G.t0+=now-(G.lastNow||now);G.lastNow=now;
-  if(waiting()&&NET.host)G.t0=now-G.S.tick*DT*1000;   // esperando jugadores: el reloj no corre
+  if((waiting()||paused())&&NET.host)G.t0=now-G.S.tick*DT*1000;   // esperando jugadores: el reloj no corre
   if(window.__FREEZE)G.t0+=now-(G.lastNow2||now);G.lastNow2=now;   // solo para pruebas: congela el reloj
-  if(!(G.mode==='online'&&!NET.host&&!NET.synced)&&!window.__FREEZE&&!waiting()){
+  if(!(G.mode==='online'&&!NET.host&&!NET.synced)&&!window.__FREEZE&&!waiting()&&!paused()){
     const T=targetTick();if(T>G.S.tick+300)G.S.tick=T-1;advanceTo(T);
     // IA: equipos sin humanos (en el anfitrión o contra la PC)
     if((G.mode==='pc'||NET.host)&&(G.S.tick-G.lastAI>=AIL[CFG.lvl].int||G.S.tick<G.lastAI)){G.lastAI=G.S.tick;for(const t of [0,1])if(!G.human[t])for(const a of aiThink(G.S,t))act(a);}
@@ -1414,7 +1454,7 @@ function frame(now){
 requestAnimationFrame(frame);
 menu();
 setTimeout(()=>{if(!window.claude&&(location.hash||'').length>2)panel();},900);
-window.__T={banner,get banners(){return banners;},netSpectate,goSpectate,lobbyLive,waiting,FIELDS,buildWorld,createPanel,slotPanel,waitPanel,startRoom,goJoin,roomFromPeers,p2pAll,aimPass,mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
+window.__T={paused,roomCheck,p2pCloseAll,banner,get banners(){return banners;},netSpectate,goSpectate,lobbyLive,waiting,FIELDS,buildWorld,createPanel,slotPanel,waitPanel,startRoom,goJoin,roomFromPeers,p2pAll,aimPass,mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
 })();
 </script>
 </body>
