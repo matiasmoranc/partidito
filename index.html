@@ -1178,6 +1178,9 @@ function pick(sx,sy){let best=-1,bd=1e9;const D3=is3D(),pen=G.S.ph==='pen';for(l
   if(D3){const a=toS(q.x,q.y,0),c=toS(q.x,q.y,2.1*MS),m=PXM(q.x,q.y);   // tocar en cualquier parte del cuerpo
     const ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,t=clamp(((sx-a.x)*ux+(sy-a.y)*uy)/l2,0,1),d=Math.hypot(sx-a.x-ux*t,sy-a.y-uy*t);if(d<Math.max(46,m*2.4)&&d<bd){bd=d;best=i;}}
   else{const s=toS(q.x,q.y),d=Math.hypot(s.x-sx,s.y-sy);if(d<Math.max(40,PR()*3)&&d<bd){bd=d;best=i;}}}return best;}
+function nearCarrier(sx,sy){const o=G.S.b.o,D3=is3D(),q=D3?VS[o]:G.S.p[o];
+  if(D3){const a=toS(q.x,q.y,0),c=toS(q.x,q.y,2.1*MS),m=PXM(q.x,q.y),ux=c.x-a.x,uy=c.y-a.y,l2=ux*ux+uy*uy||1,t=clamp(((sx-a.x)*ux+(sy-a.y)*uy)/l2,0,1);return Math.hypot(sx-a.x-ux*t,sy-a.y-uy*t)<Math.max(95,m*5);}
+  const s=toS(q.x,q.y);return Math.hypot(s.x-sx,s.y-sy)<Math.max(80,PR()*6);}
 const PTR=new Map();let pinch=null,pan=null;
 // el dedo apoya sobre el cuerpo, no en los pies: la diferencia se va absorbiendo en los primeros 5 m, así la línea nunca arranca para atrás
 function dragTarget(d,x,y){const f=toF(x,y),dm=Math.hypot(f.x-d.f0.x,f.y-d.f0.y),k=clamp(dm/5,0,1);return[clamp(f.x+d.off[0]*(1-k),0.3,FW-0.3),clamp(f.y+d.off[1]*(1-k),0.3,FH-0.3)];}
@@ -1202,6 +1205,8 @@ cv.addEventListener('pointerdown',e=>{
     if(team(pe.dk)===G.myTeam){const f=toF(x,y),yy=Math.round(clamp(f.y,CY-PO-1,CY+PO+1)*10)/10;G.myDive=yy;act({k:'d',i:pe.dk,y:yy});snd(600,500,0.05,0.06);return;}
     if(i!==pe.k)return;}
   if(nearBall(x,y))ballTap={id:e.pointerId,x,y};
+  // cerca del que tiene la pelota (zona más grande que la de los demás): es un pase, no mover la cámara (pedido del dueño)
+  if(i<0&&b.o>=0&&mine(b.o)&&!b.kick&&S.ph!=='pen'&&nearCarrier(x,y)){hold={id:e.pointerId,i:b.o,s0:[x,y],live:false,f:null};return;}
   if(i<0){if(is3D())pan={id:e.pointerId,x,y,moved:false};return;}   // en el pasto: mover la cámara
   if(b.o===i){if(!b.kick)hold={id:e.pointerId,i,s0:[x,y],live:false,f:null};return;}   // pase: arrastrar desde el que tiene la pelota
   {const f0=toF(x,y);drag={id:e.pointerId,i,pts:[[S.p[i].x,S.p[i].y]],f0,s0:[x,y],live:false,off:[S.p[i].x-f0.x,S.p[i].y-f0.y],sm:null};}
