@@ -309,6 +309,8 @@ function act(a){   // una acción del usuario o de la IA
   else{const tick=G.S.tick+clientLead();insertEvent({id,tick,a,pred:true});netSend({ty:'in',id,tick,a});}
 }
 function halfTicks(){return G.mode==='online'&&NET.rcfg&&NET.rcfg.dur&&!window.__HALF?NET.rcfg.dur*30*60:HALF;}
+function confDelay(){if(G.mode!=='online'||window.__FREEZE)return 0;if(NET.host)return needDirect()||p2pAll()?24:MAXBACK+2;return clamp(Math.ceil((NET.rtt||200)/16.7*1.5)+12,20,MAXBACK+2);}
+function confS(){const D=confDelay();return D&&G.hist.get(G.S.tick-D)||G.S;}
 function newGame(kt){G.S=newState(kt||0,halfTicks());G.events=[];G.hist=new Map();G.hist.set(0,cloneS(G.S));G.t0=performance.now();G.lastRsN=0;G.lastSc='0-0';G.lastKc=G.S.kc;G.lastAI=0;G.lastMsgN=0;G.myDive=null;passMode=false;drag=null;hold=null;}
 /* =================== ONLINE =================== */
 const NET={room:null,kind:'',on:false,host:true,me:'',team:0,peers:[],off:null,hT0:0,code:'',status:'',ob:[],obN:0,seen:{},lastHb:0,lastSnap:0,lastAI:0,synced:false,mids:new Set(),msgN:0,rcfg:null};
@@ -1123,7 +1125,7 @@ function draw(now){
   // barra superior
   ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,0,W,TOP-6);
   ctx.font='bold 20px system-ui';ctx.textBaseline='middle';ctx.textAlign='left';
-  const X0=G.started?46:12;ctx.fillStyle='#6cb4ee';ctx.fillText('CEL '+S.sc[0],X0,19);ctx.fillStyle='#fff';ctx.fillText('–',X0+70,19);ctx.fillStyle='#ff7a70';ctx.fillText(S.sc[1]+' ROJ',X0+88,19);
+  const X0=G.started?46:12,SC0=confS().sc;ctx.fillStyle='#6cb4ee';ctx.fillText('CEL '+SC0[0],X0,19);ctx.fillStyle='#fff';ctx.fillText('–',X0+70,19);ctx.fillStyle='#ff7a70';ctx.fillText(SC0[1]+' ROJ',X0+88,19);
   ctx.font='bold 12px system-ui';
   if(S.ph==='pen'||S.ph==='end'&&S.pen){const pe=S.pen,dots=t=>{let o='';for(let k=0;k<Math.max(5,pe.n[0],pe.n[1]);k++)o+=k<pe.log[t].length?(pe.log[t][k]?'●':'✕'):'○';return o;};
     ctx.fillStyle='#ffd23f';ctx.fillText('PEN',X0,42);ctx.fillStyle='#6cb4ee';ctx.fillText(dots(0),X0+30,42);ctx.fillStyle='#ff7a70';ctx.fillText(dots(1),X0+30+ctx.measureText(dots(0)).width+8,42);}
@@ -1505,22 +1507,23 @@ function frame(now){
     if((G.mode==='pc'||NET.host)&&(G.S.tick-G.lastAI>=AIL[CFG.lvl].int||G.S.tick<G.lastAI)){G.lastAI=G.S.tick;for(const t of [0,1])if(!G.human[t])for(const a of aiThink(G.S,t))act(a);}
   }
   netTick();
-  // efectos según cambios del partido
-  const S=G.S,sc=S.sc.join('-');
+  // efectos según cambios del partido. Online se miran sobre un estado de hace un ratito (confS), que ya no puede cambiar
+  // por una jugada atrasada: así no se canta un gol que después resulta atajado (pedido del dueño)
+  const S=confS(),sc=S.sc.join('-');
   if(sc!==G.lastSc){const [a,c]=G.lastSc.split('-').map(Number);if(S.sc[0]>a||S.sc[1]>c){const t=S.sc[0]>a?0:1;banner(NET.spec&&G.mode==='online'?(t?'¡GOL DE ROJO!':'¡GOL DE CELESTE!'):t===G.myTeam?'¡GOOOL!':'Gol rival',1900,true);snd(500,900,0.15,0.6,'sawtooth');}G.lastSc=sc;}
   if(S.rsN!==G.lastRsN){G.lastRsN=S.rsN;if(S.rs&&S.rs.type!=='goal'&&S.rs.type!=='half'){banner(S.rs.why==='6s'?'¡10 segundos! Lateral '+(S.rs.team===G.myTeam?'tuyo':'del rival'):{lateral:'Lateral',corner:'¡Córner!',arco:'Saque de arco'}[S.rs.type],1500);snd(2900,2700,0.05,0.2,'square');}}
   if(S.msgN!==G.lastMsgN){G.lastMsgN=S.msgN;if(/GOL|tiempo|Alargue|Penales|Revancha/.test(S.msg||''))CAM.free=false;if(S.msg){const big=/GOL|Final|Penales|Revancha/.test(S.msg);banner(S.msg,1900,big);if(S.msg==='¡GOL!')snd(500,900,0.15,0.6,'sawtooth');else snd(2900,2400,0.06,0.35,'square');}}
-  if(S.ph==='pen'){const k=S.pen.n[0]+S.pen.n[1];if(G.diveFor!==k){G.diveFor=k;G.myDive=null;}}
+  if(G.S.ph==='pen'){const k=G.S.pen.n[0]+G.S.pen.n[1];if(G.diveFor!==k){G.diveFor=k;G.myDive=null;}}
   if(S.ph==='end'&&!G.endShown){G.endShown=true;passMode=false;hold=null;drag=null;setTimeout(()=>{if(G.S.ph==='end')endPanel();},1200);}
   if(S.ph!=='end'&&G.endShown){G.endShown=false;if(G.panelKind==='end')pel.style.display='none';}
-  if(passMode&&!(S.b.o>=0&&team(S.b.o)===G.myTeam))passMode=false;
-  if(drag&&S.b.o===drag.i)drag=null;
+  if(passMode&&!(G.S.b.o>=0&&team(G.S.b.o)===G.myTeam))passMode=false;
+  if(drag&&G.S.b.o===drag.i)drag=null;
   draw(now);requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 menu();
 setTimeout(()=>{if(!window.claude&&(location.hash||'').length>2)panel();},900);
-window.__T={fanSay,chatPanel,FANS,paused,roomCheck,p2pCloseAll,banner,get banners(){return banners;},netSpectate,goSpectate,lobbyLive,waiting,FIELDS,buildWorld,createPanel,slotPanel,waitPanel,startRoom,goJoin,roomFromPeers,p2pAll,aimPass,mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
+window.__T={insertEvent,confS,confDelay,fanSay,chatPanel,FANS,paused,roomCheck,p2pCloseAll,banner,get banners(){return banners;},netSpectate,goSpectate,lobbyLive,waiting,FIELDS,buildWorld,createPanel,slotPanel,waitPanel,startRoom,goJoin,roomFromPeers,p2pAll,aimPass,mine,assignOwners,VS,BV,CAM,MESH,blocked,advanceTo,aiThink,G,NET,act,newGame,toS,toF,joined,netConnect,netJoin,panel,lobbyRooms,menu,CFG,stepSim,applyAct,newState,cloneS};
 })();
 </script>
 </body>
