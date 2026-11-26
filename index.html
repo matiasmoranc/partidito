@@ -923,13 +923,13 @@ const FANKIT=[{sh:'#f2c230',sl:'#f2c230',pa:'#3a4a63',so:'#ffffff',bo:'#2b2b2b'}
 const FANS={};   // peer -> {v:{x,y,yaw},k}
 function fanList(){const l=NET.peers.filter(p=>p.presence&&p.presence.sp).map(p=>({peer:p.peer,at:+p.presence.sp.at||0}));
   if(NET.spec&&NET.me&&!l.some(q=>q.peer===NET.me))l.push({peer:NET.me,at:0});return l.sort((a,b)=>a.at-b.at||(a.peer<b.peer?-1:1));}
-function fanSide(){const n=nearSide();return n==='y0'?FH+2.6:-2.6;}   // del lado lejano a la cámara, para que se vean
-function updFans(dt){if(G.mode!=='online'){return [];}const l=fanList(),fy=fanSide(),bx=is3D()?BV.x:G.S.b.x,out=[];
-  l.forEach((q,k)=>{const f=FANS[q.peer]||(FANS[q.peer]={v:{x:FW/2,y:fy,yaw:0},walk:0});const tx=clamp(bx+(k-(l.length-1)/2)*3.2,3,FW-3);
+function fanSide(){const n=nearSide();return n==='y0'?FH+4:-4;}/* del lado lejano a la cámara, para que se vean; 4 m afuera de la línea */
+function updFans(dt){if(G.mode!=='online'){return [];}const l=fanList(),fy=fanSide(),out=[];
+  l.forEach((q,k)=>{const f=FANS[q.peer]||(FANS[q.peer]={v:{x:FW/2+(k-(l.length-1)/2)*3.2,y:fy,yaw:0},walk:0});const tx=FW/2+(k-(l.length-1)/2)*3.2;/* quietos a la altura de la mitad de la cancha (pedido del dueño) */
     const dx=tx-f.v.x,sp=Math.min(Math.abs(dx),dt*5);f.v.x+=Math.sign(dx)*sp;f.v.y+=(fy-f.v.y)*Math.min(1,dt*3);f.walk=sp>0.002?f.walk+dt*9:0;
     f.v.yaw=Math.atan2(WX(CY)-WX(f.v.y),0)||0;f.k=k;out.push({peer:q.peer,f});});return out;}
 function fanPose(f,talking,T){const P=basePose();if(f.walk){const s=Math.sin(f.walk);P.hip=[s*25,-s*25];P.knee=[10+Math.max(0,-s)*30,10+Math.max(0,s)*30];P.sh=[-s*20,s*20];P.bob=Math.abs(s)*.03;}
-  if(talking){P.sh[0]=150+Math.sin(T*9)*18;P.sa[0]=20;P.elb[0]=25;}return P;}
+  if(talking){const w=Math.sin(T*9)*18;P.sh=[150+w,150-w];P.sa=[20,20];P.elb=[25,25];}/* levanta las dos manos */return P;}
 function drawFans(){if(PASS==='fk')return;const T=performance.now()/1000;
   for(const q of FANLIST){const f=q.f,s=NET.say&&NET.say[q.peer],talking=s&&performance.now()-s.at<1500;
     drawPlayer(-1,{v:{x:f.v.x,y:f.v.y,yaw:f.v.yaw},pose:fanPose(f,talking,T),kit:FANKIT[f.k%5],sk:SKIN[(f.k*3+1)%10],hr:HAIR[(f.k*7+2)%10]});}}
